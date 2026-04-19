@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 
 const HIDE_PATTERNS = [
   /^\/$/,
@@ -22,9 +23,12 @@ export function BottomNav() {
     pathname.startsWith('/topic/') ||
     pathname.startsWith('/course/') ||
     pathname === '/add' ||
-    pathname.startsWith('/add/') ||
+    pathname.startsWith('/add/');
+  const isRelax =
     pathname === '/budget' ||
-    pathname.startsWith('/budget/');
+    pathname.startsWith('/budget/') ||
+    pathname === '/feed' ||
+    pathname.startsWith('/feed/');
   const isProgress =
     pathname === '/progress' || pathname.startsWith('/progress/');
 
@@ -38,6 +42,23 @@ export function BottomNav() {
       >
         <span className="bottom-nav-icon" aria-hidden>🏠</span>
         <span className="bottom-nav-label">home</span>
+      </a>
+      <a
+        href="/budget"
+        className={`bottom-nav-item ${isRelax ? 'active' : ''}`}
+        aria-current={isRelax ? 'page' : undefined}
+        data-testid="nav-relax"
+      >
+        <span className="bottom-nav-icon" aria-hidden>
+          <Image
+            src="/characters/nibs.png"
+            alt=""
+            width={28}
+            height={28}
+            priority
+          />
+        </span>
+        <span className="bottom-nav-label">relax</span>
       </a>
       <a
         href="/progress"

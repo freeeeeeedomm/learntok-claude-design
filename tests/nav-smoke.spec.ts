@@ -1,17 +1,26 @@
 import { test, expect } from '@playwright/test';
 
-test('bottom nav visible on /home and /progress', async ({ page }) => {
+test('bottom nav shows three tabs (home / relax / progress) and they navigate', async ({ page }) => {
   const loginRes = await page.request.post('/api/dev/login');
   expect(loginRes.ok()).toBeTruthy();
 
   await page.goto('/home');
   await expect(page.getByTestId('bottom-nav')).toBeVisible();
   await expect(page.getByTestId('nav-home')).toBeVisible();
+  await expect(page.getByTestId('nav-relax')).toBeVisible();
   await expect(page.getByTestId('nav-progress')).toBeVisible();
 
+  // Relax → /budget + stays active there.
+  await page.getByTestId('nav-relax').click();
+  await page.waitForURL('**/budget');
+  await expect(page.getByTestId('bottom-nav')).toBeVisible();
+  await expect(page.getByTestId('nav-relax')).toHaveAttribute('aria-current', 'page');
+
+  // Progress → /progress.
   await page.getByTestId('nav-progress').click();
   await page.waitForURL('**/progress');
   await expect(page.getByTestId('bottom-nav')).toBeVisible();
+  await expect(page.getByTestId('nav-progress')).toHaveAttribute('aria-current', 'page');
 });
 
 test('bottom nav hidden on /lesson/[id]', async ({ page }) => {
