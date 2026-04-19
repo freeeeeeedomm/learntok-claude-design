@@ -28,9 +28,8 @@ export async function POST(req: Request) {
   const now = Date.now();
   const gapSec = Math.max(0, Math.floor((now - lastBeat) / 1000));
 
-  // If gap too large, treat as idle and don't credit
-  const creditable = body.data.playing && gapSec <= 60;
-  const delta = creditable ? Math.min(gapSec, MAX_CREDIT_PER_HEARTBEAT) : 0;
+  // Anti-cheat is the per-heartbeat cap; idle detection lives on the client.
+  const delta = body.data.playing ? Math.min(gapSec, MAX_CREDIT_PER_HEARTBEAT) : 0;
 
   if (session.kind === 'learn' && delta > 0) {
     await admin.from('ledger_entries').insert({

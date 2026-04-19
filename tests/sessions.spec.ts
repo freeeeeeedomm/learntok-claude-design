@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { admin, anyPresetLessonId, devAuthedContext } from './helpers/session';
+import { admin, anyPresetLessonId, backdateHeartbeat, devAuthedContext } from './helpers/session';
 
 test('start learn session: inserts sessions row and returns sessionId', async () => {
   const { ctx, userId } = await devAuthedContext();
@@ -154,4 +154,93 @@ test('end: rejects other users\' sessions with 403', async () => {
     await a.auth.admin.deleteUser(other.user!.id);
     await ctx.dispose();
   }
+});
+
+test('heartbeat learn (playing=true): credits min(gap, 20) and writes ledger', async () => {
+  const { ctx, userId } = await devAuthedContext();
+  const lessonId = await anyPresetLessonId();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'learn', lessonId },
+  })).json();
+
+  // Backdate so gap is well within clamp.
+  await backdateHeartbeat(sessionId, 15);
+
+  const hb = await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  });
+  expect(hb.status()).toBe(200);
+  const body = await hb.json();
+  expect(body.credited).toBe(15);
+  expect(body.ended).toBeUndefined();
+
+  const { data: entries } = await admin()
+    .from('ledger_entries')
+    .select('delta_seconds, label, ref_id')
+    .eq('user_id', userId)
+    .neq('label', 'welcome_gift');
+  expect(entries).toHaveLength(1);
+  expect(entries![0].delta_seconds).toBe(15);
+  expect(entries![0].label).toBe('lesson');
+  expect(entries![0].ref_id).toBe(lessonId);
+
+  await ctx.dispose();
+});
+
+test('heartbeat learn (playing=true, huge gap): credited capped at 20', async () => {
+  const { ctx, userId } = await devAuthedContext();
+  const lessonId = await anyPresetLessonId();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'learn', lessonId },
+  })).json();
+
+  // 90s gap — with the gapSec<=60 rule gone, we still credit but capped at 20.
+  await backdateHeartbeat(sessionId, 90);
+  const hb = await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  });
+  const { credited } = await hb.json();
+  expect(credited).toBe(20);
+
+  const { data: entries } = await admin()
+    .from('ledger_entries')
+    .select('delta_seconds')
+    .eq('user_id', userId)
+    .neq('label', 'welcome_gift');
+  expect(entries).toHaveLength(1);
+  expect(entries![0].delta_seconds).toBe(20);
+
+  await ctx.dispose();
+});
+
+test('heartbeat (playing=false): no credit, no ledger entry, timestamp updates', async () => {
+  const { ctx, userId } = await devAuthedContext();
+  const lessonId = await anyPresetLessonId();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'learn', lessonId },
+  })).json();
+
+  await backdateHeartbeat(sessionId, 30);
+  const hb = await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: false },
+  });
+  expect((await hb.json()).credited).toBe(0);
+
+  const { data: entries } = await admin()
+    .from('ledger_entries')
+    .select('id')
+    .eq('user_id', userId)
+    .neq('label', 'welcome_gift');
+  expect(entries).toHaveLength(0);
+
+  // last_heartbeat_at was refreshed (now very recent).
+  const { data: session } = await admin()
+    .from('sessions')
+    .select('last_heartbeat_at')
+    .eq('id', sessionId)
+    .single();
+  const ageMs = Date.now() - new Date(session!.last_heartbeat_at).getTime();
+  expect(ageMs).toBeLessThan(5000);
+
+  await ctx.dispose();
 });
