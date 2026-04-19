@@ -100,14 +100,16 @@ export function FeedPlayer({
     };
   }, [sessionId, endedBySystem, router]);
 
-  // pagehide + unmount cleanup (mirror lesson-page pattern).
+  // pagehide only. We intentionally do NOT fire endSessionBestEffort on
+  // unmount: in dev, React strict mode double-fires cleanup, which would
+  // flip endedRef before the user ever clicks. Live closing on SPA nav
+  // is handled by the orphan-close step in /api/sessions/start on the
+  // user's next session. /lesson/[id] gets away with the unmount path
+  // because its sessionId is null during the strict-mode double-fire.
   useEffect(() => {
     const onHide = () => endSessionBestEffort();
     window.addEventListener('pagehide', onHide);
-    return () => {
-      window.removeEventListener('pagehide', onHide);
-      endSessionBestEffort();
-    };
+    return () => window.removeEventListener('pagehide', onHide);
   }, [endSessionBestEffort]);
 
   const doneNow = async () => {
