@@ -16,15 +16,24 @@ export function VideoCard({
   video,
   expanded,
   onToggleExpand,
+  onDelete,
+  deleting,
 }: {
   video: AdminVideo;
   expanded: boolean;
   onToggleExpand: () => void;
+  onDelete: () => void;
+  deleting: boolean;
 }) {
   return (
     <div
       className="card col gap-8"
-      style={{ padding: 8, position: 'relative' }}
+      style={{
+        padding: 8,
+        position: 'relative',
+        opacity: deleting ? 0.4 : 1,
+        pointerEvents: deleting ? 'none' : 'auto',
+      }}
       data-testid={`admin-video-card-${video.video_id}`}
     >
       <div
@@ -74,6 +83,21 @@ export function VideoCard({
           data-testid={`admin-video-preview-${video.video_id}`}
         >
           {expanded ? 'close' : '👁 preview'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{
+            fontSize: 12,
+            padding: '6px 10px',
+            color: 'var(--bad)',
+          }}
+          onClick={onDelete}
+          disabled={deleting}
+          data-testid={`admin-video-delete-${video.video_id}`}
+          aria-label="delete video"
+        >
+          🗑
         </button>
       </div>
     </div>

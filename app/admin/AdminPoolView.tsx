@@ -7,13 +7,15 @@ const ALL = '__all__';
 
 export function AdminPoolView({
   categories,
-  videos,
+  videos: initialVideos,
 }: {
   categories: Array<{ slug: string; display_order: number }>;
   videos: AdminVideo[];
 }) {
+  const [videos, setVideos] = useState<AdminVideo[]>(initialVideos);
   const [activeCat, setActiveCat] = useState<string>(ALL);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const filtered = useMemo(
     () => (activeCat === ALL ? videos : videos.filter((v) => v.category === activeCat)),
@@ -25,6 +27,38 @@ export function AdminPoolView({
     for (const v of videos) m.set(v.category, (m.get(v.category) ?? 0) + 1);
     return m;
   }, [videos]);
+
+  const onDelete = async (id: string) => {
+    if (deletingIds.has(id)) return;
+    setDeletingIds((s) => new Set(s).add(id));
+
+    // Optimistic snapshot for revert.
+    const prev = videos;
+    setVideos((vs) => vs.filter((v) => v.id !== id));
+
+    try {
+      const res = await fetch(`/api/admin/video-pool/${id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ is_active: false }),
+      });
+      if (!res.ok) {
+        setVideos(prev); // revert
+        // eslint-disable-next-line no-console
+        console.error('delete failed', await res.text());
+      }
+    } catch (e) {
+      setVideos(prev);
+      // eslint-disable-next-line no-console
+      console.error('delete network error', e);
+    } finally {
+      setDeletingIds((s) => {
+        const n = new Set(s);
+        n.delete(id);
+        return n;
+      });
+    }
+  };
 
   return (
     <div className="col gap-16 mt-16">
@@ -74,6 +108,8 @@ export function AdminPoolView({
               video={v}
               expanded={expandedId === v.id}
               onToggleExpand={() => setExpandedId(expandedId === v.id ? null : v.id)}
+              onDelete={() => onDelete(v.id)}
+              deleting={deletingIds.has(v.id)}
             />
           ))}
         </div>
