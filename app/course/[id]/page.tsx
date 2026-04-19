@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { NibsHandle } from '@/components/characters/NibsHandle';
 
 function fmtBank(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -176,8 +175,6 @@ export default async function CoursePage({ params }: Params) {
           )}
         </div>
       </div>
-
-      <NibsHandle />
     </main>
   );
 }

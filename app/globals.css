@@ -329,3 +329,40 @@ html, body {
 .app {
   padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
 }
+
+/* ===== Nibs floating ball ===== */
+.nibs-ball {
+  position: fixed;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: 50;
+  user-select: none;
+  touch-action: none;
+  /* drop-shadow follows the alpha silhouette of the character PNG */
+  filter: drop-shadow(0 4px 10px rgba(216, 90, 62, 0.45));
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.nibs-ball img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none; /* let PointerEvents reach the <button> */
+}
+
+.nibs-ball:hover {
+  transform: scale(1.05);
+}
+
+.nibs-ball.dragging {
+  cursor: grabbing;
+  transform: scale(1.1);
+  filter: drop-shadow(0 8px 20px rgba(216, 90, 62, 0.6));
+}
