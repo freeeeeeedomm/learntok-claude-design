@@ -12,3 +12,5 @@ node_modules/
 test-results/
 playwright-report/
 tsconfig.tsbuildinfo
+data/playwright-profile/
+data/tiktok-pool.json
