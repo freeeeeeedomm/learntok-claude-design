@@ -21,18 +21,19 @@ export async function middleware(req: NextRequest) {
   const isAuthRoute = path.startsWith('/login') || path.startsWith('/auth');
   // /api/dev/* is gated server-side by NEXT_PUBLIC_DEV_PANEL; let it through here
   // so the login page can call it before a session exists.
-  // /admin/* is handled by the admin module's own gating (requireAdmin in the
-  // page + checkAdminForApi in route handlers), so middleware lets the whole
-  // /admin/* tree + its API mount through without the anon→/login redirect.
+  // /admin/* and /api/admin/* are exempt from the base auth gate so the cookie
+  // backdoor can work without a Supabase session. Every page/route under those
+  // paths MUST call requireAdmin() or checkAdminForApi() — otherwise it's
+  // silently public.
   const isPublic =
     path === '/' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/public') ||
     path.startsWith('/api/dev') ||
-    path === '/admin/unlock' ||
-    path === '/api/admin/unlock' ||
-    path.startsWith('/admin') ||
-    path.startsWith('/api/admin');
+    path === '/admin' ||
+    path.startsWith('/admin/') ||
+    path === '/api/admin' ||
+    path.startsWith('/api/admin/');
 
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url));

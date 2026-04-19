@@ -3,10 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
-const COOKIE_NAME = 'admin_unlock';
+export const ADMIN_COOKIE_NAME = 'admin_unlock';
 const COOKIE_VALUE_INPUT = 'admin-unlock-v1';
-
-export const ADMIN_COOKIE_NAME = COOKIE_NAME;
 
 export function expectedAdminToken(): string {
   const pwd = process.env.ADMIN_PASSWORD;
@@ -27,14 +25,18 @@ async function checkAdmin(): Promise<{ mode: 'role' | 'cookie' } | null> {
       .single();
     if (data?.is_admin) return { mode: 'role' };
   }
-  const token = cookies().get(COOKIE_NAME)?.value;
-  if (token) {
-    const expected = expectedAdminToken();
-    if (
-      token.length === expected.length &&
-      crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
-    ) {
-      return { mode: 'cookie' };
+  const token = cookies().get(ADMIN_COOKIE_NAME)?.value;
+  if (token && process.env.ADMIN_PASSWORD) {
+    try {
+      const expected = expectedAdminToken();
+      if (
+        token.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
+      ) {
+        return { mode: 'cookie' };
+      }
+    } catch {
+      // env var missing or HMAC failure — treat as not admin
     }
   }
   return null;
