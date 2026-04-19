@@ -50,7 +50,7 @@ export default async function CoursePage({ params }: Params) {
   const [lessonsRes, progressRes] = await Promise.all([
     supabase
       .from('lessons')
-      .select('id, position, title, duration_seconds')
+      .select('id, position, title, duration_seconds, yt_id')
       .eq('course_id', course.id)
       .order('position', { ascending: true }),
     supabase
@@ -157,7 +157,14 @@ export default async function CoursePage({ params }: Params) {
                       : '—'}
                   </div>
                 </div>
-                <div className="thumb">YT</div>
+                <div
+                  className="thumb"
+                  style={{
+                    backgroundImage: `url(https://i.ytimg.com/vi/${l.yt_id}/mqdefault.jpg)`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
               </a>
             );
           })}
