@@ -17,8 +17,7 @@ export async function POST(req: Request) {
     .select('user_id, ended_at, earned_or_spent_seconds')
     .eq('id', parsed.data.sessionId)
     .single();
-  if (!session) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  if (session.user_id !== user.id) {
+  if (!session || session.user_id !== user.id) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -26,12 +25,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, earnedOrSpent: session.earned_or_spent_seconds });
   }
 
-  const { data: updated } = await admin
+  const { data: updated, error: updateError } = await admin
     .from('sessions')
     .update({ ended_at: new Date().toISOString() })
     .eq('id', parsed.data.sessionId)
     .select('earned_or_spent_seconds')
     .single();
 
-  return NextResponse.json({ ok: true, earnedOrSpent: updated?.earned_or_spent_seconds ?? 0 });
+  if (updateError || !updated) {
+    return NextResponse.json({ error: 'update_failed' }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, earnedOrSpent: updated.earned_or_spent_seconds });
 }

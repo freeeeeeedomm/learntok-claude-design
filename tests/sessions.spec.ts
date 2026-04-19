@@ -140,17 +140,18 @@ test('end: rejects other users\' sessions with 403', async () => {
     password: 'p',
     email_confirm: true,
   });
-  const lessonId = await anyPresetLessonId();
-  const { data: foreign } = await a
-    .from('sessions')
-    .insert({ user_id: other.user!.id, kind: 'learn', lesson_id: lessonId })
-    .select('id')
-    .single();
+  try {
+    const lessonId = await anyPresetLessonId();
+    const { data: foreign } = await a
+      .from('sessions')
+      .insert({ user_id: other.user!.id, kind: 'learn', lesson_id: lessonId })
+      .select('id')
+      .single();
 
-  const res = await ctx.post('/api/sessions/end', { data: { sessionId: foreign!.id } });
-  expect(res.status()).toBe(403);
-
-  // Cleanup
-  await a.auth.admin.deleteUser(other.user!.id);
-  await ctx.dispose();
+    const res = await ctx.post('/api/sessions/end', { data: { sessionId: foreign!.id } });
+    expect(res.status()).toBe(403);
+  } finally {
+    await a.auth.admin.deleteUser(other.user!.id);
+    await ctx.dispose();
+  }
 });
