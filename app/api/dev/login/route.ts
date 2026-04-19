@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { adminClient } from '@/lib/supabase/server';
 
 // Dev-only shortcut: creates (or resets) a fixed dev user, wipes their profile
-// to pre-onboarded state, and returns the credentials so the client can
-// sign in with password. Never enabled in production.
+// to a post-onboarded state (onboarded: true so /home renders directly), and
+// signs them in via cookie so subsequent requests from the same context are
+// authed. Never enabled in production.
 
 const DEV_EMAIL = 'dev@learntok.local';
 const DEV_PASSWORD = 'devlogin-ChangeMe-2025';
@@ -37,12 +38,14 @@ export async function POST() {
     return NextResponse.json({ error: 'could_not_provision_user' }, { status: 500 });
   }
 
-  // Reset profile to pre-onboarded state.
+  // Reset profile to a known post-onboarded state so /home renders without
+  // a detour through /onboarding. Real users still go through onboarding.
   await admin
     .from('profiles')
     .update({
-      onboarded: false,
-      interests: [],
+      onboarded: true,
+      display_name: 'sam',
+      interests: ['programming', 'language', 'design'],
       rate: 1.0,
       streak: 0,
       last_study_date: null,
