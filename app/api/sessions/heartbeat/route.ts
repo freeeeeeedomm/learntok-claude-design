@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { createClient, adminClient } from '@/lib/supabase/server';
 
 // Client sends a heartbeat every ~15s while in a lesson or feed.
-// Server computes a trusted delta and inserts a ledger entry.
+// Server computes a trusted delta and inserts a ledger entry via the
+// apply_heartbeat_delta RPC so the session counter update is atomic.
 
 const Body = z.object({
   sessionId: z.string().uuid(),
@@ -41,49 +42,34 @@ export async function POST(req: Request) {
   let ended = false;
   let reason: 'budget_exhausted' | undefined;
 
-  if (delta > 0 && session.kind === 'learn') {
-    credited = delta;
-    const { error: ledgerError } = await admin.from('ledger_entries').insert({
-      user_id: user.id,
-      delta_seconds: delta,
-      label: 'lesson',
-      ref_id: session.lesson_id,
+  if (delta > 0) {
+    const signedDelta = session.kind === 'feed' ? -delta : delta;
+    const { data: rpcResult, error: rpcError } = await admin.rpc('apply_heartbeat_delta', {
+      p_session_id: session.id,
+      p_user_id: user.id,
+      p_delta: signedDelta,
+      p_label: session.kind === 'feed' ? 'feed' : 'lesson',
+      p_ref_id: session.kind === 'feed' ? session.id : session.lesson_id,
+      p_now: nowIso,
     });
-    if (ledgerError) return NextResponse.json({ error: 'ledger_write_failed' }, { status: 500 });
-    await admin.from('sessions').update({
-      last_heartbeat_at: nowIso,
-      earned_or_spent_seconds: session.earned_or_spent_seconds + delta,
-    }).eq('id', session.id);
-  } else if (delta > 0 && session.kind === 'feed') {
-    credited = -delta;
-    const { error: ledgerError } = await admin.from('ledger_entries').insert({
-      user_id: user.id,
-      delta_seconds: -delta,
-      label: 'feed',
-      ref_id: session.id,
-    });
-    if (ledgerError) return NextResponse.json({ error: 'ledger_write_failed' }, { status: 500 });
-    const newEarnedOrSpent = session.earned_or_spent_seconds - delta;
-    const spent = -newEarnedOrSpent;
-    const budget = session.budget_seconds ?? 0;
-
-    if (spent > budget) {
-      // One heartbeat of overdraft consumed → force-close.
-      await admin.from('sessions').update({
-        last_heartbeat_at: nowIso,
-        earned_or_spent_seconds: newEarnedOrSpent,
-        ended_at: nowIso,
-      }).eq('id', session.id);
+    if (rpcError || !rpcResult) {
+      return NextResponse.json({ error: 'heartbeat_failed' }, { status: 500 });
+    }
+    credited = signedDelta;
+    const result = rpcResult as { new_earned_or_spent: number; ended: boolean; reason: string | null };
+    if (result.ended) {
       ended = true;
-      reason = 'budget_exhausted';
-    } else {
-      await admin.from('sessions').update({
-        last_heartbeat_at: nowIso,
-        earned_or_spent_seconds: newEarnedOrSpent,
-      }).eq('id', session.id);
+      reason = (result.reason ?? 'budget_exhausted') as 'budget_exhausted';
     }
   } else {
-    await admin.from('sessions').update({ last_heartbeat_at: nowIso }).eq('id', session.id);
+    // Idle / paused heartbeat — only bump the timestamp.
+    const { error: updateError } = await admin
+      .from('sessions')
+      .update({ last_heartbeat_at: nowIso })
+      .eq('id', session.id);
+    if (updateError) {
+      return NextResponse.json({ error: 'session_update_failed' }, { status: 500 });
+    }
   }
 
   const { data: profile } = await admin
@@ -92,7 +78,7 @@ export async function POST(req: Request) {
     .eq('id', user.id)
     .single();
 
-  const res: { balance: number; credited: number; ended?: true; reason?: string } = {
+  const res: { balance: number; credited: number; ended?: true; reason?: 'budget_exhausted' } = {
     balance: profile?.jar_balance_cached ?? 0,
     credited,
   };
