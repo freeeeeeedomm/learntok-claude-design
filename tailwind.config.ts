@@ -5,13 +5,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: { DEFAULT: '#13110e', 2: '#1c1814', 3: '#251f19' },
-        ink: { DEFAULT: '#f3ece0', soft: '#b8ad9a', mute: '#7a7062' },
-        line: '#2e2720',
-        accent: { DEFAULT: '#e89a56', 2: '#d96f3d' },
+        bg: { DEFAULT: '#fafbfc', 2: '#f4f5f7', 3: '#eaebef' },
+        ink: { DEFAULT: '#0e0f12', soft: '#5a6068', mute: '#8b92a0' },
+        line: '#e3e5e9',
+        accent: { DEFAULT: '#5e6ad2', 2: '#4c56c4' },
         nibs: '#d85a3e',
         angel: '#f4c874',
-        good: '#a8c080',
+        good: '#10b981',
         bad: '#d96f3d',
       },
       fontFamily: {
