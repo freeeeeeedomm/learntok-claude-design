@@ -244,3 +244,86 @@ test('heartbeat (playing=false): no credit, no ledger entry, timestamp updates',
 
   await ctx.dispose();
 });
+
+test('heartbeat feed: writes negative ledger entry, updates earned_or_spent', async () => {
+  const { ctx, userId } = await devAuthedContext();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'feed', budgetSeconds: 300 },
+  })).json();
+
+  await backdateHeartbeat(sessionId, 15);
+  const hb = await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  });
+  const body = await hb.json();
+  expect(body.credited).toBe(-15);
+  expect(body.ended).toBeUndefined();
+
+  const { data: entries } = await admin()
+    .from('ledger_entries')
+    .select('delta_seconds, label, ref_id')
+    .eq('user_id', userId)
+    .neq('label', 'welcome_gift');
+  expect(entries).toHaveLength(1);
+  expect(entries![0].delta_seconds).toBe(-15);
+  expect(entries![0].label).toBe('feed');
+  expect(entries![0].ref_id).toBe(sessionId);
+
+  const { data: session } = await admin()
+    .from('sessions')
+    .select('earned_or_spent_seconds')
+    .eq('id', sessionId)
+    .single();
+  expect(session?.earned_or_spent_seconds).toBe(-15);
+
+  await ctx.dispose();
+});
+
+test('heartbeat feed: one overdraft allowed, then force-close', async () => {
+  const { ctx } = await devAuthedContext();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'feed', budgetSeconds: 30 },
+  })).json();
+
+  // Heartbeat 1: backdate 15s, spent = 15. Within budget.
+  await backdateHeartbeat(sessionId, 15);
+  let body = await (await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  })).json();
+  expect(body.credited).toBe(-15);
+  expect(body.ended).toBeUndefined();
+
+  // Heartbeat 2: backdate 15s, spent = 30. Exactly at budget, NOT over → still open.
+  await backdateHeartbeat(sessionId, 15);
+  body = await (await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  })).json();
+  expect(body.credited).toBe(-15);
+  expect(body.ended).toBeUndefined();
+
+  // Heartbeat 3: backdate 15s, spent = 45. Over budget → this heartbeat IS
+  // the one-shot overdraft; session closes after it.
+  await backdateHeartbeat(sessionId, 15);
+  body = await (await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  })).json();
+  expect(body.credited).toBe(-15);
+  expect(body.ended).toBe(true);
+  expect(body.reason).toBe('budget_exhausted');
+
+  const { data: session } = await admin()
+    .from('sessions')
+    .select('ended_at, earned_or_spent_seconds')
+    .eq('id', sessionId)
+    .single();
+  expect(session?.ended_at).not.toBeNull();
+  expect(session?.earned_or_spent_seconds).toBe(-45);
+
+  // Subsequent heartbeats on a closed session return 400 session_closed.
+  const stale = await ctx.post('/api/sessions/heartbeat', {
+    data: { sessionId, playing: true },
+  });
+  expect(stale.status()).toBe(400);
+
+  await ctx.dispose();
+});
