@@ -30,11 +30,14 @@ export function AdminPoolView({
 
   const onDelete = async (id: string) => {
     if (deletingIds.has(id)) return;
+    const removed = videos.find((v) => v.id === id);
+    if (!removed) return;
     setDeletingIds((s) => new Set(s).add(id));
 
-    // Optimistic snapshot for revert.
-    const prev = videos;
     setVideos((vs) => vs.filter((v) => v.id !== id));
+
+    const reinsert = () =>
+      setVideos((cur) => (cur.some((v) => v.id === id) ? cur : [...cur, removed]));
 
     try {
       const res = await fetch(`/api/admin/video-pool/${id}`, {
@@ -43,12 +46,12 @@ export function AdminPoolView({
         body: JSON.stringify({ is_active: false }),
       });
       if (!res.ok) {
-        setVideos(prev); // revert
+        reinsert();
         // eslint-disable-next-line no-console
         console.error('delete failed', await res.text());
       }
     } catch (e) {
-      setVideos(prev);
+      reinsert();
       // eslint-disable-next-line no-console
       console.error('delete network error', e);
     } finally {
