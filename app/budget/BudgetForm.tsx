@@ -1,36 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-function fmtBank(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s ? `${m}m ${s.toString().padStart(2, '0')}s` : `${m}m`;
-}
+import { BudgetPicker } from '@/components/budget/BudgetPicker';
 
 export function BudgetForm({ balance }: { balance: number }) {
-  // Default budget: 5 min, clamped to available balance.
   const defaultBudget = Math.min(300, balance);
   const [budget, setBudget] = useState<number>(defaultBudget);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Unique, valid preset chips (skip over zero or balance-exceeding ones).
-  const presets = useMemo(() => {
-    const raw = [120, 300, 600, balance];
-    const seen = new Set<number>();
-    return raw.filter((v) => {
-      if (v <= 0 || v > balance) return false;
-      if (seen.has(v)) return false;
-      seen.add(v);
-      return true;
-    });
-  }, [balance]);
-
-  const sliderMax = Math.max(60, Math.min(balance, 1800)); // cap at 30 min
   const displayBudget = Math.min(budget, balance);
 
   const start = async () => {
@@ -63,46 +43,7 @@ export function BudgetForm({ balance }: { balance: number }) {
 
   return (
     <>
-      <div className="row wrap gap-8 mt-4" data-testid="budget-presets">
-        {presets.map((p) => (
-          <button
-            key={p}
-            type="button"
-            className={`chip ${displayBudget === p ? 'active' : ''}`}
-            onClick={() => setBudget(p)}
-            data-testid={`budget-preset-${p}`}
-          >
-            {p === balance ? 'all' : `${Math.floor(p / 60)}m`}
-          </button>
-        ))}
-      </div>
-
-      <div className="card mt-8 col gap-12">
-        <div className="display tc" style={{ fontSize: 44 }}>
-          {fmtBank(displayBudget)}
-        </div>
-        <input
-          type="range"
-          min={30}
-          max={sliderMax}
-          step={30}
-          value={displayBudget}
-          onChange={(e) => setBudget(parseInt(e.target.value, 10))}
-          style={{ width: '100%', accentColor: 'var(--accent)' }}
-          data-testid="budget-slider"
-        />
-        <div
-          className="row between"
-          style={{
-            fontFamily: 'var(--mono)',
-            fontSize: 10,
-            color: 'var(--ink-mute)',
-          }}
-        >
-          <span>30s</span>
-          <span>jar: {fmtBank(balance)}</span>
-        </div>
-      </div>
+      <BudgetPicker balance={balance} value={budget} onChange={setBudget} />
 
       {error && (
         <div
