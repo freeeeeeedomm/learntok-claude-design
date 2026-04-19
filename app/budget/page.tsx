@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/server';
 import { BudgetForm } from './BudgetForm';
 
@@ -39,10 +40,19 @@ export default async function BudgetPage() {
       </div>
 
       <div className="pad pad-top col gap-12" style={{ paddingTop: 80 }}>
-        <div className="eyebrow">budget</div>
-        <div className="display" style={{ fontSize: 28 }}>
-          how long?
+        <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden>
+          <Image
+            src="/characters/nibs.png"
+            alt=""
+            width={96}
+            height={96}
+            priority
+          />
         </div>
+        <div className="display tc" style={{ fontSize: 22 }}>
+          想休息一下吗？
+        </div>
+        <div className="eyebrow tc">pick a budget</div>
 
         <BudgetForm balance={balance} />
       </div>
