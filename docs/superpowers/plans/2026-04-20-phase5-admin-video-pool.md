@@ -580,7 +580,7 @@ Builds the admin dashboard with category tabs and a thumbnail grid. No delete ye
 
 ```tsx
 import { requireAdmin } from '@/lib/admin-auth';
-import { createClient } from '@/lib/supabase/server';
+import { adminClient } from '@/lib/supabase/server';
 import { AdminPoolView } from './AdminPoolView';
 
 export const dynamic = 'force-dynamic';
@@ -588,7 +588,10 @@ export const dynamic = 'force-dynamic';
 export default async function AdminPage() {
   await requireAdmin();
 
-  const supabase = createClient();
+  // Use service-role client: the page itself is admin-gated via requireAdmin(),
+  // and cookie-mode admins have no user session, so an RLS-scoped client would
+  // return nothing.
+  const supabase = adminClient();
 
   const [catsRes, vidsRes] = await Promise.all([
     supabase
