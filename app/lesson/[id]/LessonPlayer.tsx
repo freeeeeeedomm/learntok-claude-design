@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useYouTubePlayer } from '@/hooks/use-youtube-player';
+import { useIdleDetection } from '@/hooks/use-idle-detection';
 
 export type LessonPlayerProps = {
   lesson: {
@@ -68,8 +69,7 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     };
   }, [state.phase, lesson.id]);
 
-  // Placeholder until Task 6 wires useIdleDetection.
-  const isIdle = false;
+  const { isIdle, acknowledge } = useIdleDetection({ active: !playing });
 
   const markDone = async () => {
     if (submitting || state.phase !== 'ready') return;
@@ -102,6 +102,21 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     } catch {
       setSubmitting(false);
     }
+  };
+
+  const doneForNow = async () => {
+    if (submitting || state.phase !== 'ready') return;
+    setSubmitting(true);
+    try {
+      await fetch('/api/sessions/end', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: state.sessionId }),
+      });
+    } catch {
+      // ignore — orphan cleanup handles it
+    }
+    router.push('/home');
   };
 
   useEffect(() => {
@@ -192,6 +207,41 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
           {submitting ? 'saving…' : 'mark done & next'}
         </button>
       </div>
+
+      {isIdle && (
+        <div
+          data-testid="idle-sheet"
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            zIndex: 20,
+          }}
+        >
+          <div
+            className="col gap-16"
+            style={{
+              width: '100%', maxWidth: 480,
+              background: 'var(--bg-2)',
+              borderTopLeftRadius: 20, borderTopRightRadius: 20,
+              borderTop: '1px solid var(--line)',
+              padding: 24,
+            }}
+          >
+            <div style={{ width: 40, height: 4, background: 'var(--line)', borderRadius: 2, alignSelf: 'center' }} />
+            <div className="display" style={{ fontSize: 24 }}>still studying?</div>
+            <div className="body">
+              video's been paused 5 min. we paused the earn clock too — no cheating by accident 😊
+            </div>
+            <div className="col gap-8">
+              <button className="btn btn-primary" onClick={acknowledge}>yep, resume</button>
+              <button className="btn btn-ghost" onClick={doneForNow} disabled={submitting}>
+                done for now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
