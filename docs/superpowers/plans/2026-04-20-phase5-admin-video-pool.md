@@ -409,18 +409,50 @@ export default function AdminUnlockPage() {
 }
 ```
 
-- [ ] **Step 7: Update `middleware.ts` to allowlist the unlock page + endpoint**
+- [ ] **Step 7: Update `middleware.ts` to allowlist the admin module**
 
-Replace the `isPublic` block (currently lines 24-28). The new block:
+Replace the `isPublic` block (currently lines 24-28). The whole `/admin/*` and `/api/admin/*` tree must be exempt from the base auth gate so the cookie backdoor works without a Supabase session — the admin module's own helpers (`requireAdmin` / `checkAdminForApi`) gate everything downstream. Add the comment so future contributors don't accidentally ship a silently-public admin route:
 
 ```ts
+  // /admin/* and /api/admin/* are exempt from the base auth gate so the cookie
+  // backdoor can work without a Supabase session. Every page/route under those
+  // paths MUST call requireAdmin() or checkAdminForApi() — otherwise it's
+  // silently public.
   const isPublic =
     path === '/' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/public') ||
     path.startsWith('/api/dev') ||
-    path === '/admin/unlock' ||
-    path === '/api/admin/unlock';
+    path === '/admin' ||
+    path.startsWith('/admin/') ||
+    path === '/api/admin' ||
+    path.startsWith('/api/admin/');
+```
+
+Also create `app/admin/page.tsx` as a temporary stub so the guard tests below can assert the redirect behavior. Task 3 will replace this file with the full pool UI.
+
+```tsx
+// app/admin/page.tsx (STUB — Task 3 replaces this file entirely)
+import { requireAdmin } from '@/lib/admin-auth';
+
+export const dynamic = 'force-dynamic';
+
+export default async function AdminPage() {
+  await requireAdmin();
+  return (
+    <main className="app">
+      <div className="pad pad-top col gap-16">
+        <div className="eyebrow">admin</div>
+        <div className="display" style={{ fontSize: 26 }}>
+          video pool
+        </div>
+        <div className="body" style={{ color: 'var(--ink-mute)', fontSize: 13 }}>
+          coming soon.
+        </div>
+      </div>
+    </main>
+  );
+}
 ```
 
 - [ ] **Step 8: Write `tests/admin-unlock.spec.ts`**
@@ -517,15 +549,18 @@ If "cookie unlocks /admin" fails because `/admin` 404s (Task 4 hasn't built it y
 - [ ] **Step 11: Commit**
 
 ```bash
-git add lib/admin-auth.ts app/admin/unlock/ app/api/admin/unlock/ middleware.ts \
+git add lib/admin-auth.ts app/admin/page.tsx app/admin/unlock/ \
+        app/api/admin/unlock/ middleware.ts \
         tests/admin-unlock.spec.ts tests/admin-guard.spec.ts .env.example
 git commit -m "feat(admin): add HMAC-cookie unlock flow + middleware allowlist
 
 requireAdmin() (page-side, redirects) and checkAdminForApi() (route-side,
 returns null) gate the admin module via either profiles.is_admin or a
-400-day HMAC cookie keyed by ADMIN_PASSWORD. /admin/unlock and the unlock
-POST are added to the public allowlist so anonymous visitors can submit
-the password.
+400-day HMAC cookie keyed by ADMIN_PASSWORD. /admin and /api/admin are
+allowlisted in middleware so the admin module's own guard can handle
+both authed-admin and cookie-backdoor paths; a stub /admin/page.tsx
+calls requireAdmin() so the guard tests can exercise the redirect
+before Task 3 builds the pool UI.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```
@@ -537,11 +572,11 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 Builds the admin dashboard with category tabs and a thumbnail grid. No delete yet — that comes in Task 4. This task ends with a working grid that reflects whatever's in `video_pool`.
 
 **Files:**
-- Create: `app/admin/page.tsx`
+- Replace: `app/admin/page.tsx` (currently a stub from Task 2 Step 7 — overwrite it entirely with the version below)
 - Create: `app/admin/AdminPoolView.tsx`
 - Create: `app/admin/VideoCard.tsx`
 
-- [ ] **Step 1: Write `app/admin/page.tsx` (server component)**
+- [ ] **Step 1: Replace `app/admin/page.tsx` (server component) — overwrite the Task 2 stub**
 
 ```tsx
 import { requireAdmin } from '@/lib/admin-auth';
