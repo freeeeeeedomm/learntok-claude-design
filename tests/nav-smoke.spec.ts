@@ -42,7 +42,7 @@ test('bottom nav hidden on /feed', async ({ page }) => {
   await page.waitForURL(/\/feed\?session=/);
   await expect(page.getByTestId('bottom-nav')).toHaveCount(0);
 
-  try { await page.getByTestId('feed-done').click(); } catch {}
+  try { await page.getByTestId('angel-exit').click(); } catch {}
 });
 
 test('bottom nav hidden on /login and /', async ({ page }) => {
