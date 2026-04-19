@@ -98,6 +98,103 @@ html, body {
   .mt-auto { margin-top: auto; }
 
   .fade-enter { animation: fadein 0.25s; }
+
+  /* Nibs handle — bottom-edge summon. Port from v3/styles.css. */
+  .nibs-handle {
+    position: fixed;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 88px; height: 14px;
+    cursor: grab;
+    z-index: 20;
+    display: flex; justify-content: center; align-items: flex-end;
+    padding-bottom: 0;
+    touch-action: none;
+  }
+  .nibs-handle:active { cursor: grabbing; }
+  .nibs-handle svg { pointer-events: none; transition: transform 0.2s; }
+  .nibs-handle:hover svg { transform: translateY(-3px); }
+  .nibs-pulse::after {
+    content: '';
+    position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+    width: 60px; height: 2px;
+    background: var(--nibs);
+    border-radius: 2px;
+    opacity: 0.5;
+    animation: nibspulse 2s infinite;
+  }
+  @keyframes nibspulse { 0%,100% { opacity: 0.2; width: 40px; } 50% { opacity: 0.6; width: 70px; } }
+
+  /* Course / lesson list row (port from v3). */
+  .lesson-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px; border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--bg-2);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .lesson-row:hover { border-color: var(--ink-mute); }
+  .lesson-row.done { opacity: 0.65; }
+  .lesson-row.current { border-color: var(--accent); background: rgba(94, 106, 210, 0.05); }
+
+  .thumb {
+    width: 44px; height: 44px; flex-shrink: 0;
+    border-radius: 10px;
+    background: var(--bg-3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+
+  .check-circle {
+    width: 28px; height: 28px; flex-shrink: 0;
+    border-radius: 50%;
+    border: 1.5px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    color: var(--ink-mute);
+  }
+  .check-circle.done { background: var(--good); border-color: var(--good); color: #fff; }
+  .check-circle.current { border-color: var(--accent); color: var(--accent); }
+
+  /* Jar chip — bank balance display */
+  .jar-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 99px;
+    background: var(--bg-2); border: 1px solid var(--line);
+    font-size: 13px; font-weight: 500; color: var(--ink);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .jar-chip:hover { border-color: var(--ink-mute); }
+  .jar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+  /* Progress bar */
+  .bar {
+    width: 100%; height: 6px;
+    background: var(--bg-3);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar > i {
+    display: block; height: 100%;
+    background: var(--accent);
+    transition: width 0.25s;
+  }
+
+  /* Topbar — fixed back button + chip */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 10;
+    background: var(--bg);
+  }
+  .topbar .back {
+    font-size: 22px; cursor: pointer; color: var(--ink-soft);
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+  }
 }
 
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
