@@ -259,11 +259,43 @@ html, body {
     pointer-events: none;
   }
 
-  /* "Done now" bottom bar on the feed (Phase 4 overrides this with
-     .angel-exit-bar; kept while the button is present during rename). */
-  .feed-done-bar {
-    position: absolute; left: 16px; right: 16px; bottom: 20px;
+  /* Angel exit bar — bottom pill button with angel PNG + "回去学习". */
+  .angel-exit-bar {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    display: flex; justify-content: center;
     z-index: 25;
+    pointer-events: none; /* only the button itself is tappable */
+  }
+  .angel-exit-btn {
+    pointer-events: auto;
+    display: flex; align-items: center;
+    gap: 12px;
+    padding: 10px 20px 10px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    border: none;
+    color: #1a1a1a;
+    font-size: 16px; font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .angel-exit-btn:active:not(:disabled) {
+    transform: scale(0.96);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  .angel-exit-btn:disabled {
+    opacity: 0.6; cursor: default;
+  }
+  .angel-exit-btn img {
+    display: block;
+    width: 40px; height: 40px;
+    object-fit: contain;
+  }
+  .angel-exit-label {
+    letter-spacing: 0.02em;
   }
 }
 

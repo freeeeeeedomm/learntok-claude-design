@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { VideoEmbed } from '@/components/feed/VideoEmbed';
 
 // 18 hardcoded public TikTok IDs (from learntok-v2 seed_presets). Categories
@@ -241,15 +242,26 @@ export function FeedPlayer({
         </div>
       </div>
 
-      <div className="feed-done-bar">
+      <div className="angel-exit-bar">
         <button
           type="button"
-          className="btn btn-primary"
+          className="angel-exit-btn"
           onClick={doneNow}
           disabled={submitting}
-          data-testid="feed-done"
+          data-testid="angel-exit"
+          aria-label="back to learning"
         >
-          {submitting ? 'saving…' : 'done now'}
+          <Image
+            src="/characters/angel.png"
+            alt=""
+            width={40}
+            height={40}
+            priority
+            draggable={false}
+          />
+          <span className="angel-exit-label">
+            {submitting ? 'saving…' : '回去学习'}
+          </span>
         </button>
       </div>
 
