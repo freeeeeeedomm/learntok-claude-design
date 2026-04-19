@@ -20,7 +20,7 @@ test('budget → feed happy path: pick preset, start, land on feed, done now', a
   await expect(page.getByTestId('feed-root')).toBeVisible();
   await expect(page.getByTestId('feed-remaining')).toContainText(/^[0-9]+:[0-9]{2}$/);
 
-  await page.getByTestId('feed-done').click();
+  await page.getByTestId('angel-exit').click();
   await page.waitForURL('**/home', { timeout: 15_000 });
 });
 
@@ -42,7 +42,7 @@ test('feed: session cleanup writes ended_at on exit', async ({ page }) => {
   const sessionId = url.searchParams.get('session');
   expect(sessionId).toBeTruthy();
 
-  await page.getByTestId('feed-done').click();
+  await page.getByTestId('angel-exit').click();
   await page.waitForURL('**/home', { timeout: 10_000 });
 
   // Confirm server closed the session.
