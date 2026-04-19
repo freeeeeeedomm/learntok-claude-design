@@ -233,12 +233,13 @@ html, body {
   }
   .feed-video iframe {
     width: 100%; height: 100%; border: 0;
-    pointer-events: none;
+    /* iframe is interactive when the swipe overlay is tap-hidden for 4s;
+       see FeedPlayer onOverlayPointerUp. */
   }
   .feed-top-bar {
     position: absolute; top: 50px; left: 16px; right: 16px;
     height: 3px; background: rgba(255,255,255,0.15);
-    border-radius: 2px; overflow: hidden; z-index: 10;
+    border-radius: 2px; overflow: hidden; z-index: 25;
   }
   .feed-top-bar > i {
     display: block; height: 100%;
@@ -250,30 +251,19 @@ html, body {
     background: rgba(0,0,0,0.4);
     padding: 4px 10px; border-radius: 99px;
     font-family: var(--mono); font-size: 11px; font-weight: 600;
-    color: #fff; z-index: 10;
+    color: #fff; z-index: 25;
   }
   .feed-overlay-info {
     position: absolute; left: 16px; right: 80px; bottom: 96px;
-    color: #fff; z-index: 5;
+    color: #fff; z-index: 25;
+    pointer-events: none;
   }
-  .feed-side {
-    position: absolute; right: 12px; bottom: 100px;
-    display: flex; flex-direction: column; gap: 18px;
-    z-index: 10;
-  }
-  .feed-side .icon-btn {
-    width: 44px; height: 44px; border-radius: 50%;
-    background: rgba(255,255,255,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px; color: #fff;
-    border: none; cursor: pointer;
-  }
-  .feed-side .icon-btn:hover { background: rgba(255,255,255,0.25); }
 
-  /* "Done now" bottom bar on the feed */
+  /* "Done now" bottom bar on the feed (Phase 4 overrides this with
+     .angel-exit-bar; kept while the button is present during rename). */
   .feed-done-bar {
     position: absolute; left: 16px; right: 16px; bottom: 20px;
-    z-index: 15;
+    z-index: 25;
   }
 }
 
@@ -339,5 +329,33 @@ html, body {
 /* Give pages breathing room so content isn't covered by the fixed nav. */
 .app {
   padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ===== Feed swipe + slide animation ===== */
+.feed-swipe-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+  touch-action: none;
+  cursor: grab;
+}
+
+.feed-slide-up {
+  animation: feed-slide-out-up 300ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.feed-slide-down {
+  animation: feed-slide-out-down 300ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes feed-slide-out-up {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(-100%); opacity: 0; }
+}
+
+@keyframes feed-slide-out-down {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
 }
 

@@ -48,8 +48,13 @@ export function FeedPlayer({
   const [vidIdx, setVidIdx] = useState(0);
   const [endedBySystem, setEndedBySystem] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<'none' | 'up' | 'down'>('none');
+  const [overlayHidden, setOverlayHidden] = useState(false);
   const router = useRouter();
   const endedRef = useRef(false);
+  const lastSwipeRef = useRef(0);
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStart = useRef<{ y: number; t: number } | null>(null);
 
   const endSessionBestEffort = useCallback(() => {
     if (endedRef.current) return;
@@ -142,16 +147,86 @@ export function FeedPlayer({
     router.push('/home');
   };
 
-  const nextVid = () => setVidIdx((i) => i + 1);
+  // ---- Swipe gesture: wheel (desktop) + pointer (mobile) ----
+  const commitSwipe = useCallback((direction: 1 | -1) => {
+    const now = performance.now();
+    if (now - lastSwipeRef.current < 800) return; // throttle
+    lastSwipeRef.current = now;
+    setSlideDirection(direction > 0 ? 'up' : 'down');
+    setTimeout(() => {
+      setVidIdx((i) => (direction < 0 ? Math.max(0, i - 1) : i + 1));
+      setSlideDirection('none');
+    }, 300);
+  }, []);
+
+  const onOverlayWheel = useCallback(
+    (e: React.WheelEvent<HTMLDivElement>) => {
+      if (Math.abs(e.deltaY) < 30) return;
+      commitSwipe(e.deltaY > 0 ? 1 : -1);
+    },
+    [commitSwipe]
+  );
+
+  const onOverlayPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    pointerStart.current = { y: e.clientY, t: performance.now() };
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  }, []);
+
+  const onOverlayPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const start = pointerStart.current;
+      pointerStart.current = null;
+      try {
+        (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+      } catch {
+        // pointer may have been cancelled
+      }
+      if (!start) return;
+      const dy = e.clientY - start.y;
+      const dt = performance.now() - start.t;
+
+      // Tap (minimal movement + quick): hide overlay for 4s so user can
+      // reach TikTok's own UI (like / share / mute toggle).
+      if (Math.abs(dy) < 6 && dt < 250) {
+        setOverlayHidden(true);
+        if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+        overlayTimerRef.current = setTimeout(() => setOverlayHidden(false), 4000);
+        return;
+      }
+
+      // Swipe: |dy| > 50 AND duration > 50ms. Finger UP = dy negative = next.
+      if (Math.abs(dy) > 50 && dt > 50) {
+        commitSwipe(dy < 0 ? 1 : -1);
+      }
+    },
+    [commitSwipe]
+  );
+
+  // Clear overlay-hide timer on unmount so it doesn't fire after cleanup.
+  useEffect(() => () => {
+    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+  }, []);
 
   const vid = FEED_VIDS[vidIdx % FEED_VIDS.length];
   const pct = Math.max(0, Math.min(100, (remain / budgetSeconds) * 100));
 
   return (
     <div className="feed" data-testid="feed-root">
-      <div className="feed-video">
+      <div
+        className={`feed-video ${slideDirection !== 'none' ? `feed-slide-${slideDirection}` : ''}`}
+      >
         <VideoEmbed source={vid.source} videoId={vid.id} fillHeight />
       </div>
+      {!overlayHidden && !endedBySystem && (
+        <div
+          className="feed-swipe-overlay"
+          onWheel={onOverlayWheel}
+          onPointerDown={onOverlayPointerDown}
+          onPointerUp={onOverlayPointerUp}
+          onPointerCancel={() => { pointerStart.current = null; }}
+          data-testid="feed-swipe-overlay"
+        />
+      )}
 
       <div className="feed-top-bar">
         <i style={{ width: `${pct}%` }} />
@@ -164,18 +239,6 @@ export function FeedPlayer({
         <div style={{ fontSize: 13, marginTop: 4, opacity: 0.9 }}>
           {vid.caption}
         </div>
-      </div>
-
-      <div className="feed-side">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={nextVid}
-          aria-label="next video"
-          data-testid="feed-next"
-        >
-          ↓
-        </button>
       </div>
 
       <div className="feed-done-bar">
