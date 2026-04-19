@@ -32,5 +32,13 @@ export default async function FeedPage({
   const budget = sessionRow.budget_seconds ?? 0;
   if (budget <= 0) redirect('/budget');
 
-  return <FeedPlayer sessionId={sessionId} budgetSeconds={budget} />;
+  const { data: vids } = await supabase
+    .from('video_pool')
+    .select('video_id, source, title, category')
+    .eq('is_active', true);
+
+  // Server-side shuffle so each session gets a different order.
+  const shuffled = [...(vids ?? [])].sort(() => Math.random() - 0.5);
+
+  return <FeedPlayer sessionId={sessionId} budgetSeconds={budget} vids={shuffled} />;
 }

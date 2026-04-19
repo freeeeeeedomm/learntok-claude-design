@@ -1,4 +1,29 @@
 import { test, expect } from '@playwright/test';
+import { admin as svcAdmin } from './helpers/session';
+
+const SEED_VIDS = [
+  '7777777777000000001',
+  '7777777777000000002',
+  '7777777777000000003',
+];
+
+test.beforeAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+  await a.from('video_pool').insert(
+    SEED_VIDS.map((v) => ({
+      video_id: v,
+      source: 'tiktok' as const,
+      category: '喜剧',
+      title: 'feed-swipe-seed',
+    }))
+  );
+});
+
+test.afterAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+});
 
 async function startFeedSession(page: import('@playwright/test').Page) {
   const loginRes = await page.request.post('/api/dev/login');
