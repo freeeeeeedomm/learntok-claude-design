@@ -57,5 +57,34 @@ export async function POST() {
     label: 'welcome_gift',
   });
 
+  // Sign the dev user in server-side so the response sets the @supabase/ssr
+  // auth cookie. Used by Playwright E2E tests; no-op for any caller that
+  // ignores Set-Cookie headers.
+  const { createServerClient } = await import('@supabase/ssr');
+  const { cookies } = await import('next/headers');
+  const cookieStore = cookies();
+  const ssr = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (n: string) => cookieStore.get(n)?.value,
+        set: (n: string, v: string, o: any) => {
+          try { cookieStore.set({ name: n, value: v, ...o }); } catch {}
+        },
+        remove: (n: string, o: any) => {
+          try { cookieStore.set({ name: n, value: '', ...o }); } catch {}
+        },
+      },
+    }
+  );
+  const { error: signInError } = await ssr.auth.signInWithPassword({
+    email: DEV_EMAIL,
+    password: DEV_PASSWORD,
+  });
+  if (signInError) {
+    return NextResponse.json({ error: signInError.message }, { status: 500 });
+  }
+
   return NextResponse.json({ email: DEV_EMAIL, password: DEV_PASSWORD });
 }
