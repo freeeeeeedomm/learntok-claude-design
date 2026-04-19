@@ -54,11 +54,12 @@ Build the server-trusted session primitive (`start`/`heartbeat`/`end`) and two c
 
 **Request body:** unchanged — `{ sessionId: uuid, playing: boolean }`.
 
-**Behavior (delta computation unchanged for both kinds):**
+**Behavior (delta computation shared by both kinds):**
 1. Load session via `adminClient`, verify ownership and `ended_at is null`.
 2. Compute `gapSec = floor((now - last_heartbeat_at) / 1000)`.
-3. `creditable = body.playing && gapSec <= 60`.
-4. `delta = creditable ? min(gapSec, 20) : 0`. (`MAX_CREDIT_PER_HEARTBEAT = 20`.)
+3. `delta = body.playing ? min(gapSec, 20) : 0`. (`MAX_CREDIT_PER_HEARTBEAT = 20`.)
+
+**No gap-based idle refusal.** `MAX_CREDIT_PER_HEARTBEAT = 20` already caps a single heartbeat to ≤20s regardless of how long the gap was, which is the only anti-cheat knob we need. Idle detection lives entirely on the client (see the `use-idle-detection` hook below); the server stays minimal and trusts whatever `playing` flag the client sends.
 
 **Learn branch (unchanged):**
 - If `delta > 0`: insert `ledger_entries { delta_seconds: +delta, label: 'lesson', ref_id: session.lesson_id }`; update `sessions { last_heartbeat_at: now, earned_or_spent_seconds: earned_or_spent_seconds + delta }`.
@@ -125,25 +126,35 @@ type UseYouTubePlayer = () => {
 
 ### `hooks/use-idle-detection.ts`
 
-**Purpose:** tick an "idle for" counter while the user is not actively watching. Mirrors `v3/screens.jsx:139-154` but as an isolated primitive.
+**Purpose:** count "how long has the user been idle" while the video is paused, and expose a **latched** flag that only an explicit user action can clear. Drives both the "still studying?" sheet and the heartbeat gating that follows it.
 
 **Shape:**
 ```ts
 type UseIdleDetection = (opts: { active: boolean; timeoutSec?: number }) => {
-  idleFor: number;                  // seconds
-  isIdle: boolean;                  // idleFor >= timeoutSec
-  reset: () => void;
+  idleFor: number;                    // seconds, visible for debugging / UI
+  isIdle: boolean;                    // LATCHED once idleFor >= timeoutSec
+  acknowledge: () => void;            // clears isIdle + resets idleFor to 0
 };
 ```
 
 **Behavior:**
 - Default `timeoutSec = 300`.
 - While `active === true`, a 1000ms interval increments `idleFor`.
-- When `active` transitions `true → false`, `idleFor` resets to 0.
-- `reset()` zeroes `idleFor` imperatively (used when the user confirms "still studying" in the idle sheet).
+- When `active` transitions `true → false`, `idleFor` resets to 0 (natural un-pause). **`isIdle` is NOT cleared** by this transition — only `acknowledge()` can clear it.
+- Once `idleFor >= timeoutSec`, `isIdle` flips to `true` and **stays true** until `acknowledge()` is called. This latch is the key to the "user must confirm presence before credit resumes" requirement.
+- `acknowledge()` sets `idleFor = 0` and `isIdle = false`. Called from the "yep, resume" button in the idle sheet.
 - Interval cleared on unmount.
 
-**Lesson-page usage:** `useIdleDetection({ active: !playing })` — counts idle only while paused, matches the prototype semantics.
+**Lesson-page usage:**
+```ts
+const { playing } = useYouTubePlayer();
+const { isIdle, acknowledge } = useIdleDetection({ active: !playing });
+const effectivePlaying = playing && !isIdle;  // this is what the heartbeat sends
+```
+
+**Why latch?** If we cleared `isIdle` on un-pause, a user who walks away, comes back, and just hits play (ignoring the sheet) would silently resume crediting. The latch forces an explicit acknowledgement — until they click "resume," the lesson page sends `playing=false` regardless of what YT reports, and the server credits nothing.
+
+**Scope:** Consumed by the lesson page only. Feed sessions don't need idle detection — the countdown budget naturally bounds how long a feed session can drag, and `playing=false` already halts debit.
 
 ## Client integration (reference only — pages are out of scope)
 
@@ -151,7 +162,8 @@ For clarity, a future lesson page will wire this as:
 
 ```ts
 const { playing, ended, iframeProps } = useYouTubePlayer();
-const { isIdle, reset } = useIdleDetection({ active: !playing });
+const { isIdle, acknowledge } = useIdleDetection({ active: !playing });
+const effectivePlaying = playing && !isIdle;
 const sessionId = useRef<string | null>(null);
 
 // on mount
@@ -165,14 +177,20 @@ useEffect(() => {
   };
 }, []);
 
-// 15s heartbeat
+// 15s heartbeat — sends effectivePlaying (playing gated on idle acknowledgement)
 useEffect(() => {
   const t = setInterval(() => {
     if (!sessionId.current) return;
-    fetch('/api/sessions/heartbeat', { method:'POST', body: JSON.stringify({ sessionId: sessionId.current, playing }) });
+    fetch('/api/sessions/heartbeat', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId: sessionId.current, playing: effectivePlaying }),
+    });
   }, 15_000);
   return () => clearInterval(t);
-}, [playing]);
+}, [effectivePlaying]);
+
+// idle sheet trigger
+{isIdle && <StillStudyingSheet onResume={acknowledge} onLeave={() => router.push('/home')} />}
 ```
 
 This integration is not delivered in this track — it is shown so reviewers can validate the hook contracts.
@@ -181,7 +199,7 @@ This integration is not delivered in this track — it is shown so reviewers can
 
 New file: `tests/sessions.spec.ts` (Playwright). Tests run against the local Supabase stack. Requires `pnpm supabase:reset` before the run to seed a clean state.
 
-Three scenarios:
+Four scenarios:
 
 1. **Learn: start → heartbeat ×3 → end.**
    - Start session with an existing lesson id.
@@ -194,9 +212,13 @@ Three scenarios:
    - Heartbeat loop with `playing=true` until response returns `ended: true, reason: 'budget_exhausted'`.
    - Expect ≥ 2 feed ledger entries (all negative), session `ended_at` non-null after the final heartbeat, and total spent (`-sum(delta_seconds)`) > 30 (overdraft is allowed and expected — the last heartbeat pushes past budget before the server closes the session).
 
-3. **Idle clamp.**
+3. **Credit clamp.**
    - Start learn session; backdate `last_heartbeat_at` to 90s ago; heartbeat with `playing=true`.
-   - Response `credited === 0`; no new ledger entry; `last_heartbeat_at` updated to now.
+   - Response `credited === 20`; a single ledger entry with `delta_seconds = 20`; `last_heartbeat_at` updated to now. Confirms the 20s cap is the only anti-cheat layer on the server.
+
+4. **Pause halts credit.**
+   - Start learn session; heartbeat with `playing=false`.
+   - Response `credited === 0`; no new ledger entry; `last_heartbeat_at` still updates. Confirms that the idle-latch gating (client sending `playing=false` until acknowledgement) correctly suppresses credit server-side.
 
 **Out of scope for tests:** the two hooks. They are small, deterministic React primitives; a unit test harness is overkill for Track F+G. Will revisit if they grow behavior.
 
