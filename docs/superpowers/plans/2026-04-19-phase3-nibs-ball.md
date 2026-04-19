@@ -8,6 +8,7 @@
 - `<NibsBall />` is a global client component mounted in root layout, using Pointer Events (Capacitor-ready) with a 6px / 200ms threshold to distinguish tap from drag. Position persisted in `localStorage` keyed `nibs-ball-pos`; clamped to viewport on resize.
 - Tap opens `<BreakSheet />`, a bottom-sheet state machine with `ask` → `budget` stages. The `budget` stage reuses `<BudgetPicker />` extracted from the existing `app/budget/BudgetForm.tsx`, so the sheet and the `/budget` page share a single chip+slider+display primitive.
 - Submitting the sheet hits the same `/api/sessions/start` endpoint `/budget` already uses, and navigates to `/feed?session=…&budget=…` — zero new server code.
+- Visual: the ball uses `/characters/nibs.png` (a 256×256 PNG of the red demon character, transparent background) via Next.js `<Image>`. No emoji. Same character also appears in BreakSheet's 'ask' stage for visual continuity.
 
 **Tech Stack:** Next.js 14 client components, Pointer Events, CSS custom properties, Playwright.
 
@@ -24,6 +25,10 @@
 - `components/characters/NibsBall.tsx` — the global draggable ball
 - `components/characters/BreakSheet.tsx` — two-stage bottom sheet
 - `tests/nibs-ball-smoke.spec.ts` — visibility + tap → sheet → feed flow
+
+**Assets (already committed ahead of this plan):**
+- `public/characters/nibs.png` — 256×256 red demon character, transparent bg, ~71KB
+- `public/characters/angel.png` — 256×256 angel character, transparent bg, ~85KB (reserved for Phase 4 AngelHandle)
 
 **Modified files:**
 - `app/budget/BudgetForm.tsx` — thin wrapper around `<BudgetPicker />` + its own submit button + fetch
@@ -244,6 +249,7 @@ Keep `onSummon` as a prop so BreakSheet can be wired in Task 3 without touching 
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import Image from 'next/image';
 
 const STORAGE_KEY = 'nibs-ball-pos';
 const TAP_MOVE_THRESHOLD = 6; // px
@@ -399,7 +405,14 @@ export function NibsBall({ onSummon }: { onSummon?: () => void } = {}) {
       aria-label="summon nibs"
       data-testid="nibs-ball"
     >
-      <span aria-hidden>😈</span>
+      <Image
+        src="/characters/nibs.png"
+        alt=""
+        width={56}
+        height={56}
+        priority
+        draggable={false}
+      />
     </button>
   );
 }
@@ -415,20 +428,26 @@ Add these rules at the end of the file:
   position: fixed;
   width: 56px;
   height: 56px;
-  border-radius: 50%;
-  background: var(--nibs);
-  box-shadow: 0 4px 12px rgba(216, 90, 62, 0.35);
+  padding: 0;
+  background: transparent;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  border: none;
-  color: #fff;
   cursor: grab;
   z-index: 50;
   user-select: none;
   touch-action: none;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  /* drop-shadow follows the alpha silhouette of the character PNG */
+  filter: drop-shadow(0 4px 10px rgba(216, 90, 62, 0.45));
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.nibs-ball img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none; /* let PointerEvents reach the <button> */
 }
 
 .nibs-ball:hover {
@@ -438,7 +457,7 @@ Add these rules at the end of the file:
 .nibs-ball.dragging {
   cursor: grabbing;
   transform: scale(1.1);
-  box-shadow: 0 8px 24px rgba(216, 90, 62, 0.5);
+  filter: drop-shadow(0 8px 20px rgba(216, 90, 62, 0.6));
 }
 ```
 
@@ -487,7 +506,7 @@ npx tsc --noEmit
 npm run dev
 ```
 
-Navigate to `/home`. Expected: a small red-orange circular ball appears at the bottom-right. You can drag it around; refreshing persists its position. Navigate to `/lesson/<preset>`; ball disappears. Navigate back to `/home`; ball reappears at its stored position. Tap the ball — nothing happens yet (Task 3 wires the sheet).
+Navigate to `/home`. Expected: the red Nibs character (PNG, ~56×56) appears at the bottom-right with a soft red drop-shadow. You can drag it around; refreshing persists its position. Navigate to `/lesson/<preset>`; ball disappears. Navigate back to `/home`; ball reappears at its stored position. Tap the ball — nothing happens yet (Task 3 wires the sheet).
 
 - [ ] **Step 2.6: Commit**
 
@@ -515,6 +534,7 @@ git commit -m "feat(nibs): draggable floating ball with position memory"
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { BudgetPicker } from '@/components/budget/BudgetPicker';
 
@@ -606,7 +626,15 @@ export function BreakSheet({ open, onClose }: { open: boolean; onClose: () => vo
 
         {stage === 'ask' && (
           <div className="col gap-16 tc">
-            <div style={{ fontSize: 64, lineHeight: 1 }} aria-hidden>😈</div>
+            <div style={{ display: 'flex', justifyContent: 'center' }} aria-hidden>
+              <Image
+                src="/characters/nibs.png"
+                alt=""
+                width={112}
+                height={112}
+                draggable={false}
+              />
+            </div>
             <div className="display" style={{ fontSize: 22 }}>
               想休息一下吗？
             </div>
@@ -930,7 +958,7 @@ git push -u origin redesign-phase3
 gh pr create --title "Phase 3: Nibs floating ball + BreakSheet" --body "$(cat <<'EOF'
 ## Summary
 
-- **`<NibsBall />`** — draggable floating ball, 56px red-orange with 😈, hidden on /lesson/*, /feed, /, /login, /auth, /onboarding. Pointer Events (Capacitor-ready) with 6px/200ms tap-vs-drag threshold. Position persisted in localStorage + clamped to viewport on resize.
+- **`<NibsBall />`** — draggable floating ball, 56×56 PNG of the Nibs demon character (\`public/characters/nibs.png\`) with soft red drop-shadow. Hidden on /lesson/*, /feed, /, /login, /auth, /onboarding. Pointer Events (Capacitor-ready) with 6px/200ms tap-vs-drag threshold. Position persisted in localStorage + clamped to viewport on resize.
 - **`<BreakSheet />`** — two-stage bottom sheet: 'want a break?' → budget picker → POST /api/sessions/start → /feed. Closes on backdrop tap / Escape / '再学一下'.
 - **`<NibsLayer />`** — tiny wrapper that owns the open/close state for the ball + sheet pair, mounted once in root layout.
 - **`<BudgetPicker />` extracted** from BudgetForm so the sheet and /budget page share the chip+slider+display UI.
