@@ -21,7 +21,7 @@ export default async function CoursePage({ params }: Params) {
   const [courseRes, profileRes] = await Promise.all([
     supabase
       .from('courses')
-      .select('id, title, topic, icon')
+      .select('id, title, topic, topic_id, icon')
       .eq('id', params.id)
       .maybeSingle(),
     supabase
@@ -34,6 +34,18 @@ export default async function CoursePage({ params }: Params) {
   // RLS hides non-visible courses → maybeSingle returns null.
   if (!courseRes.data) redirect('/home');
   const course = courseRes.data;
+
+  // If this course belongs to a topic, fetch the topic metadata for the
+  // breadcrumb + back-link destination.
+  let topicMeta: { id: string; title: string; icon: string | null } | null = null;
+  if (course.topic_id) {
+    const { data: t } = await supabase
+      .from('topics')
+      .select('id, title, icon')
+      .eq('id', course.topic_id)
+      .maybeSingle();
+    if (t) topicMeta = { id: t.id, title: t.title, icon: t.icon };
+  }
 
   const [lessonsRes, progressRes] = await Promise.all([
     supabase
@@ -69,7 +81,11 @@ export default async function CoursePage({ params }: Params) {
   return (
     <main className="app">
       <div className="topbar">
-        <a href="/home" className="back" data-testid="course-back">
+        <a
+          href={topicMeta ? `/topic/${topicMeta.id}` : '/home'}
+          className="back"
+          data-testid="course-back"
+        >
           ‹
         </a>
         <a
@@ -83,7 +99,13 @@ export default async function CoursePage({ params }: Params) {
       </div>
 
       <div className="pad pad-top" style={{ paddingTop: 80 }}>
-        {course.topic && <div className="eyebrow">{course.topic}</div>}
+        {topicMeta ? (
+          <div className="eyebrow">
+            {topicMeta.icon ?? ''} {topicMeta.title}
+          </div>
+        ) : course.topic ? (
+          <div className="eyebrow">{course.topic}</div>
+        ) : null}
         <div className="display mt-4" style={{ fontSize: 28 }}>
           {course.title}
         </div>
