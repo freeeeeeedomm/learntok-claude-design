@@ -2,16 +2,30 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { VideoEmbed } from '@/components/feed/VideoEmbed';
 
-// Five hardcoded public YouTube IDs for the feed demo. Seed content is
-// out of scope; the /add page (Track D) will let users build real
-// feeds later.
-const FEED_VIDS: Array<{ id: string; user: string; caption: string }> = [
-  { id: 'dQw4w9WgXcQ', user: '@neverendingref', caption: 'a classic never dies' },
-  { id: 'jNQXAC9IVRw', user: '@me_at_zoo', caption: 'the first ever YouTube video' },
-  { id: '9bZkp7q19f0', user: '@kpopclassics', caption: 'throwback vibes' },
-  { id: 'kJQP7kiw5Fk', user: '@musicafuego', caption: 'the most watched music video' },
-  { id: 'M7lc1UVf-VE', user: '@google', caption: 'developer clip from google io' },
+// 18 hardcoded public TikTok IDs (from learntok-v2 seed_presets). Categories
+// span comedy / music / pets / magic / art / cooking. The /add page can
+// eventually let users curate their own feeds; this is v1 seed content.
+const FEED_VIDS: Array<{ id: string; source: 'tiktok' | 'youtube'; caption: string }> = [
+  { id: '6862153058223197445', source: 'tiktok', caption: 'Bella Poarch — M to the B' },
+  { id: '6950627842518568197', source: 'tiktok', caption: 'Khaby Lame — peel a banana' },
+  { id: '6979606181463526661', source: 'tiktok', caption: 'Khaby Lame — wing mirror hack' },
+  { id: '6932635718615338246', source: 'tiktok', caption: 'Sugar Crash parody' },
+  { id: '6973813778597055749', source: 'tiktok', caption: 'pick-up line comedy' },
+  { id: '7332342275151760642', source: 'tiktok', caption: 'Leah Halton — inverted lip sync' },
+  { id: '7071079551756979483', source: 'tiktok', caption: 'MONA — singing performance' },
+  { id: '7058186727248235782', source: 'tiktok', caption: 'Say It Right' },
+  { id: '7028775404173413678', source: 'tiktok', caption: 'dog interaction' },
+  { id: '6839416095586159878', source: 'tiktok', caption: 'cat pawing' },
+  { id: '6975140587196517638', source: 'tiktok', caption: 'chipmunks eating nuts' },
+  { id: '6768504823336815877', source: 'tiktok', caption: 'Zach King — magic broomstick' },
+  { id: '6749520869598481669', source: 'tiktok', caption: 'Zach King — glass + cake' },
+  { id: '6766278000783658245', source: 'tiktok', caption: 'Zach King — hiding spots' },
+  { id: '6911406868699073798', source: 'tiktok', caption: 'mouth drawing art' },
+  { id: '7065370017944063278', source: 'tiktok', caption: 'UP-themed 3D animation' },
+  { id: '7332187682480590112', source: 'tiktok', caption: 'chocolate covered strawberries' },
+  { id: '6894081763379924229', source: 'tiktok', caption: 'Billie Eilish — TimeWarp' },
 ];
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
@@ -136,12 +150,7 @@ export function FeedPlayer({
   return (
     <div className="feed" data-testid="feed-root">
       <div className="feed-video">
-        <iframe
-          key={vid.id}
-          src={`https://www.youtube.com/embed/${vid.id}?autoplay=1&mute=1&controls=0&loop=1&playlist=${vid.id}&rel=0&modestbranding=1&playsinline=1`}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          title={vid.caption}
-        />
+        <VideoEmbed source={vid.source} videoId={vid.id} fillHeight />
       </div>
 
       <div className="feed-top-bar">
@@ -152,11 +161,6 @@ export function FeedPlayer({
       </div>
 
       <div className="feed-overlay-info">
-        <div
-          style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 600 }}
-        >
-          {vid.user}
-        </div>
         <div style={{ fontSize: 13, marginTop: 4, opacity: 0.9 }}>
           {vid.caption}
         </div>
