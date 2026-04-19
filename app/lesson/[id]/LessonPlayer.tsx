@@ -192,6 +192,19 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     };
   }, [state, playing, isIdle, router]);
 
+  // Client-side 1s tick: while the video is playing (and session is ready),
+  // increment the displayed balance by 1 every second. The heartbeat effect
+  // above overwrites balance with the server-authoritative value every 15s,
+  // so local drift is bounded to one heartbeat window.
+  useEffect(() => {
+    if (state.phase !== 'ready') return;
+    if (!playing || isIdle) return;
+    const id = setInterval(() => {
+      setBalance((b) => b + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state.phase, playing, isIdle]);
+
   useEffect(() => {
     const onHide = () => endSessionBestEffort();
     window.addEventListener('pagehide', onHide);
@@ -241,7 +254,8 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
             {...iframeProps}
             src={`https://www.youtube.com/embed/${lesson.ytId}?enablejsapi=1&rel=0&modestbranding=1`}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-            allow="autoplay; encrypted-media"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
             title={lesson.title}
           />
         </div>
