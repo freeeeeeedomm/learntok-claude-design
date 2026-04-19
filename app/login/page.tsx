@@ -82,7 +82,7 @@ export default function LoginPage() {
               placeholder="you@example.com"
               className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink"
             />
-            <button disabled={busy} className="w-full bg-accent text-[#1a1109] py-3 rounded-xl font-semibold disabled:opacity-50">
+            <button disabled={busy} className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-50">
               {busy ? 'sending…' : 'send code'}
             </button>
           </form>
@@ -103,7 +103,7 @@ export default function LoginPage() {
               placeholder="••••••"
               className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink text-center font-mono tracking-[0.4em] text-xl"
             />
-            <button disabled={busy || code.length < 6} className="w-full bg-accent text-[#1a1109] py-3 rounded-xl font-semibold disabled:opacity-50">
+            <button disabled={busy || code.length < 6} className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-50">
               {busy ? 'verifying…' : 'verify'}
             </button>
             <button

@@ -7,18 +7,18 @@
 /* Prototype tokens — mirror tailwind.config.ts, kept as CSS vars so ported inline
    styles (style={{ color: 'var(--accent)' }}) work without rewrites. */
 :root {
-  --bg: #13110e;
-  --bg-2: #1c1814;
-  --bg-3: #251f19;
-  --ink: #f3ece0;
-  --ink-soft: #b8ad9a;
-  --ink-mute: #7a7062;
-  --line: #2e2720;
-  --accent: #e89a56;
-  --accent-2: #d96f3d;
+  --bg: #fafbfc;
+  --bg-2: #f4f5f7;
+  --bg-3: #eaebef;
+  --ink: #0e0f12;
+  --ink-soft: #5a6068;
+  --ink-mute: #8b92a0;
+  --line: #e3e5e9;
+  --accent: #5e6ad2;
+  --accent-2: #4c56c4;
   --nibs: #d85a3e;
   --angel: #f4c874;
-  --good: #a8c080;
+  --good: #10b981;
   --bad: #d96f3d;
   --serif: 'Fraunces', Georgia, serif;
   --sans: 'Inter', system-ui, sans-serif;
@@ -54,8 +54,8 @@ html, body {
   }
   .btn:active { transform: scale(0.98); }
   .btn:disabled { cursor: not-allowed; }
-  .btn-primary { background: var(--accent); color: #1a1109; }
-  .btn-primary:hover { background: #efb26e; }
+  .btn-primary { background: var(--accent); color: #ffffff; }
+  .btn-primary:hover { background: #7480dc; }
   .btn-ghost { background: var(--bg-2); color: var(--ink); border: 1px solid var(--line); }
   .btn-ghost:hover { background: var(--bg-3); }
   .btn-sm { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
@@ -67,7 +67,7 @@ html, body {
     font-size: 13px; font-weight: 500; cursor: pointer;
     transition: all 0.15s;
   }
-  .chip.active { background: var(--accent); color: #1a1109; border-color: var(--accent); }
+  .chip.active { background: var(--accent); color: #ffffff; border-color: var(--accent); }
   .chip:hover { border-color: var(--ink-mute); }
 
   /* Cards */
@@ -77,7 +77,7 @@ html, body {
     border-radius: 16px;
     padding: 16px;
   }
-  .card-hl { border-color: var(--accent); background: rgba(232, 154, 86, 0.06); }
+  .card-hl { border-color: var(--accent); background: rgba(94, 106, 210, 0.06); }
 
   /* Layout utilities */
   .row { display: flex; }
