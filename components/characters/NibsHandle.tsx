@@ -14,9 +14,12 @@ export function NibsHandle({
   onSummon,
   pulse = true,
 }: {
-  onSummon: () => void;
+  onSummon?: () => void;
   pulse?: boolean;
-}) {
+} = {}) {
+  // If no onSummon handler is wired yet (Nibs chat route TBD), interactions
+  // are silent no-ops rather than errors.
+  const safeSummon = onSummon ?? (() => {});
   // Guard so a single interaction only summons once even if both the
   // drag-threshold and the pointerup fire.
   const summonedRef = useRef(false);
@@ -30,7 +33,7 @@ export function NibsHandle({
       if (summonedRef.current) return;
       if (startY - ev.clientY > 20) {
         summonedRef.current = true;
-        onSummon();
+        safeSummon();
       }
     };
     const onUp = () => {
@@ -38,7 +41,7 @@ export function NibsHandle({
       window.removeEventListener('pointerup', onUp);
       if (!summonedRef.current) {
         summonedRef.current = true;
-        onSummon();
+        safeSummon();
       }
     };
 
