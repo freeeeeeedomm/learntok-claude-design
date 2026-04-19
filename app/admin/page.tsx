@@ -1,22 +1,38 @@
 import { requireAdmin } from '@/lib/admin-auth';
+import { createClient } from '@/lib/supabase/server';
+import { AdminPoolView } from './AdminPoolView';
 
 export const dynamic = 'force-dynamic';
 
-// Stub: full implementation lives in Task 3 of the phase-5 plan.
-// For now we just need the guard to run so /admin properly redirects
-// non-admins to /admin/unlock, and stays at /admin for admins.
 export default async function AdminPage() {
   await requireAdmin();
+
+  const supabase = createClient();
+
+  const [catsRes, vidsRes] = await Promise.all([
+    supabase
+      .from('categories')
+      .select('slug, display_order')
+      .eq('is_active', true)
+      .order('display_order'),
+    supabase
+      .from('video_pool')
+      .select('id, video_id, source, category, title, author, thumbnail_url')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  const categories = catsRes.data ?? [];
+  const videos = vidsRes.data ?? [];
+
   return (
     <main className="app">
-      <div className="pad pad-top col gap-16">
-        <div className="eyebrow">admin</div>
-        <div className="display" style={{ fontSize: 26 }}>
+      <div className="pad pad-top">
+        <div className="eyebrow">🛡️ admin</div>
+        <div className="display mt-4" style={{ fontSize: 26 }}>
           video pool
         </div>
-        <div className="body" style={{ color: 'var(--ink-mute)', fontSize: 13 }}>
-          coming soon.
-        </div>
+        <AdminPoolView categories={categories} videos={videos} />
       </div>
     </main>
   );
