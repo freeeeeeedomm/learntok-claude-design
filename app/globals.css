@@ -278,3 +278,54 @@ html, body {
 }
 
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* ===== Bottom navigation ===== */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  display: flex;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px));
+  gap: 12px;
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  color: var(--ink-mute);
+  text-decoration: none;
+  font-size: 11px;
+  border-radius: 10px;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.bottom-nav-item:hover {
+  background: var(--bg-2);
+}
+
+.bottom-nav-item.active {
+  color: var(--accent);
+}
+
+.bottom-nav-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.bottom-nav-label {
+  letter-spacing: 0.02em;
+}
+
+/* Give pages breathing room so content isn't covered by the fixed nav. */
+.app {
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
