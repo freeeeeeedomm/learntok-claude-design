@@ -146,6 +146,28 @@ export default async function HomePage() {
           </a>
         )}
 
+        <a
+          href="/budget"
+          className="card mt-16"
+          style={{
+            display: 'block',
+            textDecoration: 'none',
+            color: 'inherit',
+            borderStyle: 'dashed',
+          }}
+          data-testid="home-take-break"
+        >
+          <div className="row between aic">
+            <div>
+              <div className="eyebrow">take a break</div>
+              <div style={{ fontWeight: 600, fontSize: 15, marginTop: 2 }}>
+                spend some jar time scrolling
+              </div>
+            </div>
+            <div style={{ color: 'var(--ink-mute)', fontSize: 18 }}>›</div>
+          </div>
+        </a>
+
         <div className="eyebrow mt-24">your topics</div>
         <div className="col gap-8 mt-8">
           {courses.map((c) => {
