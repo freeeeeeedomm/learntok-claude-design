@@ -30,11 +30,14 @@ export async function POST(req: Request) {
   }
 
   // Auto-close any open sessions for this user so at most one is active.
-  await admin
+  const { error: orphanCloseError } = await admin
     .from('sessions')
     .update({ ended_at: new Date().toISOString() })
     .eq('user_id', user.id)
     .is('ended_at', null);
+  if (orphanCloseError) {
+    return NextResponse.json({ error: 'orphan_close_failed' }, { status: 500 });
+  }
 
   const insertRow = {
     user_id: user.id,
