@@ -65,6 +65,37 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     };
   }, [state.phase, lesson.id]);
 
+  // Placeholder until Task 6 wires useIdleDetection.
+  const isIdle = false;
+
+  useEffect(() => {
+    if (state.phase !== 'ready') return;
+    const sessionId = state.sessionId;
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const res = await fetch('/api/sessions/heartbeat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId, playing: playing && !isIdle }),
+        });
+        if (cancelled || !res.ok) return;
+        const body: { balance?: number } = await res.json();
+        if (typeof body.balance === 'number') setBalance(body.balance);
+      } catch {
+        // single blip — next tick retries
+      }
+    };
+
+    tick(); // establish anchor immediately
+    const id = setInterval(tick, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [state, playing, isIdle]);
+
   if (state.phase === 'failed') {
     return (
       <main className="app pad center col gap-16" style={{ minHeight: '100vh' }}>
