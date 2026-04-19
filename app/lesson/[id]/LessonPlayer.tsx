@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useYouTubePlayer } from '@/hooks/use-youtube-player';
 
 export type LessonPlayerProps = {
@@ -31,6 +32,8 @@ function fmtBalance(seconds: number): string {
 export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: LessonPlayerProps) {
   const [state, setState] = useState<StartState>({ phase: 'starting' });
   const [balance, setBalance] = useState(initialBalance);
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
   const { playing, iframeProps } = useYouTubePlayer();
 
   // We need a stable reference to the session id even after the component re-renders
@@ -67,6 +70,39 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
 
   // Placeholder until Task 6 wires useIdleDetection.
   const isIdle = false;
+
+  const markDone = async () => {
+    if (submitting || state.phase !== 'ready') return;
+    setSubmitting(true);
+    try {
+      // 1. Mark progress.
+      const completeRes = await fetch('/api/lessons/complete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ lessonId: lesson.id }),
+      });
+      if (!completeRes.ok) {
+        setSubmitting(false);
+        // TODO(toast): show "couldn't save — try again" non-blocking; for now log.
+        console.error('complete failed', completeRes.status);
+        return;
+      }
+      // 2. End session (failure is non-blocking — orphan cleanup will handle it).
+      try {
+        await fetch('/api/sessions/end', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId: state.sessionId }),
+        });
+      } catch {
+        // ignore
+      }
+      // 3. Navigate home.
+      router.push('/home');
+    } catch {
+      setSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (state.phase !== 'ready') return;
@@ -147,8 +183,13 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
           )}
         </div>
 
-        <button className="btn btn-primary" data-testid="mark-done" disabled>
-          mark done &amp; next
+        <button
+          className="btn btn-primary"
+          data-testid="mark-done"
+          onClick={markDone}
+          disabled={submitting || state.phase !== 'ready'}
+        >
+          {submitting ? 'saving…' : 'mark done & next'}
         </button>
       </div>
     </main>
