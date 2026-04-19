@@ -40,6 +40,7 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
   // We need a stable reference to the session id even after the component re-renders
   // or unmounts — used by cleanup code in later tasks.
   const sessionIdRef = useRef<string | null>(null);
+  const endedRef = useRef(false);
 
   const retryStart = () => setState({ phase: 'starting' });
 
@@ -97,6 +98,7 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
       } catch {
         // ignore
       }
+      endedRef.current = true;
       // 3. Navigate home.
       router.push('/home');
     } catch {
@@ -116,7 +118,30 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     } catch {
       // ignore — orphan cleanup handles it
     }
+    endedRef.current = true;
     router.push('/home');
+  };
+
+  const endSessionBestEffort = () => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId || endedRef.current) return;
+    endedRef.current = true;
+    try {
+      navigator.sendBeacon(
+        '/api/sessions/end',
+        new Blob([JSON.stringify({ sessionId })], { type: 'application/json' })
+      );
+    } catch {
+      // some browsers/environments reject Blob bodies; fall back to fetch keepalive
+      try {
+        fetch('/api/sessions/end', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionId }),
+          keepalive: true,
+        });
+      } catch {}
+    }
   };
 
   useEffect(() => {
@@ -146,6 +171,18 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
       clearInterval(id);
     };
   }, [state, playing, isIdle]);
+
+  useEffect(() => {
+    const onHide = () => endSessionBestEffort();
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      endSessionBestEffort();
+    };
+  }, []);
 
   if (state.phase === 'failed') {
     return (
