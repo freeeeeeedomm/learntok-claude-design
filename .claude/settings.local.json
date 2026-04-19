@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install *)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(npm -v)",
+      "Bash(npm install *)",
+      "Bash(docker info *)",
+      "Skill(update-config)"
+    ]
+  }
+}

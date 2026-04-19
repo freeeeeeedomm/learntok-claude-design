@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LearnTok v3 — clickable prototype</title>
+<link rel="stylesheet" href="v3/styles.css"/>
+</head>
+<body>
+
+<div class="stage">
+  <div class="phone-frame">
+    <div class="phone-screen">
+      <div class="notch"></div>
+      <div id="root" style="width:100%; height:100%;"></div>
+    </div>
+  </div>
+  <div class="meta-panel">
+    <div class="sub">v3 · clickable prototype</div>
+    <h2>LearnTok</h2>
+
+    <div class="sec">
+      <h4>try this</h4>
+      <ul>
+        <li>go through the <b>onboarding</b> — Nibs & the Angel meet you on slide 4</li>
+        <li>pick a lesson → the YouTube embed plays → the <b>jar ticks up every second</b> while playing</li>
+        <li>hold & pull up the <b>two red horns</b> at the bottom of any study page</li>
+        <li>set a budget → hit the feed → countdown runs in the top bar</li>
+        <li>hold & pull up the <b>halo handle</b> at the bottom of the feed to exit early</li>
+        <li>at the nudge threshold, Nibs peeks in with a check-in</li>
+      </ul>
+    </div>
+
+    <div class="sec">
+      <h4>dev panel</h4>
+      <ul>
+        <li>click the <b>DEV</b> tab on the left edge of the phone</li>
+        <li>add time to the jar, skip ahead, reset, restart onboarding</li>
+      </ul>
+    </div>
+
+    <div class="sec">
+      <h4>note on TikTok</h4>
+      <ul>
+        <li>you're right — TikTok's Embed Player API is usable for playback. updated stance: curate TikTok URLs just like YouTube Shorts. No infinite-feed API exists, so "feed" = your curated list, swipe advances through it.</li>
+      </ul>
+    </div>
+
+    <div class="sec">
+      <h4>next</h4>
+      <ul>
+        <li>real character design pass on Nibs + Angel</li>
+        <li>Supabase + Next.js scaffold for persistence</li>
+        <li>curation tooling (admin) to manage the content library</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- React / Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="v3/characters.jsx"></script>
+<script type="text/babel" src="v3/onboarding.jsx"></script>
+<script type="text/babel" src="v3/screens.jsx"></script>
+
+<script type="text/babel">
+const INITIAL = {
+  onboarded: false,
+  interests: [],
+  rate: 1,
+  bank: 300, // 5min seed
+  streak: 6,
+  earnedToday: 0,
+  spentToday: 0,
+  nudgeAt: 60,
+  showTimer: false,
+  ledger: [
+    { label: 'welcome gift', delta: 300 },
+  ],
+  courses: [
+    {
+      id: 'react', title: 'Intro to React', topic: 'web dev', icon: 'R',
+      lessons: [
+        { id: 'r1', title: 'what is react?', dur: 480, ytId: 'Tn6-PIqc4UM', done: true },
+        { id: 'r2', title: 'jsx in 100 seconds', dur: 240, ytId: 'hviGQ_ZEHuc', done: true },
+        { id: 'r3', title: 'components & props', dur: 720, ytId: 'Tn6-PIqc4UM', done: false },
+        { id: 'r4', title: 'state & hooks', dur: 960, ytId: 'hviGQ_ZEHuc', done: false },
+      ],
+    },
+    {
+      id: 'css', title: 'CSS & layout', topic: 'web dev', icon: 'C',
+      lessons: [
+        { id: 'c1', title: 'the box model', dur: 360, ytId: 'rIO5326FgPE', done: true },
+        { id: 'c2', title: 'flexbox', dur: 540, ytId: 'phWxA89Dy94', done: true },
+        { id: 'c3', title: 'CSS grid', dur: 720, ytId: 'rg7Fvvl3taU', done: false },
+      ],
+    },
+    {
+      id: 'es', title: 'Spanish A1', topic: 'languages', icon: 'ES',
+      lessons: [
+        { id: 's1', title: 'greetings & intros', dur: 480, ytId: 't7X7x1DnbPY', done: false },
+        { id: 's2', title: 'numbers 1–20', dur: 360, ytId: 't7X7x1DnbPY', done: false },
+      ],
+    },
+  ],
+};
+
+const App = () => {
+  const [state, setStateRaw] = React.useState(() => {
+    try { const saved = localStorage.getItem('learntok_v3'); if (saved) return { ...INITIAL, ...JSON.parse(saved) }; } catch {}
+    return INITIAL;
+  });
+  const [nav, setNav] = React.useState({ screen: state.onboarded ? 'home' : 'onboarding', params: {} });
+  const [nibsOpen, setNibsOpen] = React.useState(false);
+  const [devOpen, setDevOpen] = React.useState(false);
+
+  const set = (updater) => setStateRaw(s => {
+    const next = typeof updater === 'function' ? updater(s) : updater;
+    try { localStorage.setItem('learntok_v3', JSON.stringify(next)); } catch {}
+    return next;
+  });
+
+  const goto = (screen, params = {}) => {
+    if (screen === 'nibs-ask') { setNibsOpen(true); return; }
+    setNibsOpen(false);
+    setNav({ screen, params });
+  };
+
+  const finishOnboarding = () => {
+    set(s => ({ ...s, onboarded: true }));
+    setNav({ screen: 'home', params: {} });
+  };
+
+  const screen = nav.screen;
+  const p = nav.params;
+
+  return (
+    <>
+      <button className="dev-fab" onClick={() => setDevOpen(true)}>DEV</button>
+
+      {screen === 'onboarding' && <Onboarding onFinish={finishOnboarding} state={state} set={set} />}
+      {screen === 'home' && <Home state={state} set={set} goto={goto} />}
+      {screen === 'course' && <Course courseId={p.courseId} state={state} goto={goto} />}
+      {screen === 'lesson' && <Lesson courseId={p.courseId} lessonId={p.lessonId} state={state} set={set} goto={goto} />}
+      {screen === 'lesson-done' && <LessonDone courseId={p.courseId} lessonId={p.lessonId} state={state} goto={goto} />}
+      {screen === 'budget' && <Budget state={state} set={set} goto={goto} />}
+      {screen === 'feed' && <Feed state={state} set={set} goto={goto} />}
+      {screen === 'time-up' && <TimeUp goto={goto} />}
+      {screen === 'progress' && <Progress state={state} goto={goto} />}
+      {screen === 'add' && <Add goto={goto} />}
+
+      {nibsOpen && <NibsAsk state={state} goto={(s,p) => { setNibsOpen(false); goto(s,p); }} close={() => setNibsOpen(false)} />}
+      {devOpen && <DevPanel state={state} set={set} close={() => setDevOpen(false)} goto={goto} />}
+    </>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
