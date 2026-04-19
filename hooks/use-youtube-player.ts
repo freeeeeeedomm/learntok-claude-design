@@ -36,6 +36,7 @@ export function useYouTubePlayer(): UseYouTubePlayerReturn {
 
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
+      if (e.origin !== 'https://www.youtube.com') return;
       if (typeof e.data !== 'string') return;
       let parsed: unknown;
       try {
