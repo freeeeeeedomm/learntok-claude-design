@@ -327,3 +327,42 @@ test('heartbeat feed: one overdraft allowed, then force-close', async () => {
 
   await ctx.dispose();
 });
+
+test('scenario: learn start → 3× heartbeat → end sums to total', async () => {
+  const { ctx, userId } = await devAuthedContext();
+  const lessonId = await anyPresetLessonId();
+  const { sessionId } = await (await ctx.post('/api/sessions/start', {
+    data: { kind: 'learn', lessonId },
+  })).json();
+
+  // Three heartbeats, each backdated 15s so each credits 15.
+  for (let i = 0; i < 3; i++) {
+    await backdateHeartbeat(sessionId, 15);
+    const hb = await ctx.post('/api/sessions/heartbeat', {
+      data: { sessionId, playing: true },
+    });
+    expect((await hb.json()).credited).toBe(15);
+  }
+
+  const { data: entries } = await admin()
+    .from('ledger_entries')
+    .select('delta_seconds, label')
+    .eq('user_id', userId)
+    .neq('label', 'welcome_gift');
+  expect(entries).toHaveLength(3);
+  expect(entries!.every((e) => e.delta_seconds === 15 && e.label === 'lesson')).toBe(true);
+
+  const end = await ctx.post('/api/sessions/end', { data: { sessionId } });
+  const payload = await end.json();
+  expect(payload.ok).toBe(true);
+  expect(payload.earnedOrSpent).toBe(45);
+
+  const { data: session } = await admin()
+    .from('sessions')
+    .select('ended_at')
+    .eq('id', sessionId)
+    .single();
+  expect(session?.ended_at).not.toBeNull();
+
+  await ctx.dispose();
+});
