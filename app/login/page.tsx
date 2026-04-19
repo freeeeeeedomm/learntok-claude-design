@@ -63,7 +63,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: devEmail, password });
     setBusy(false);
     if (error) { setError(error.message); return; }
-    router.push('/home'); // /home gates on onboarded; dev user was just reset, so redirects to /onboarding
+    // /api/dev/login sets onboarded=true, so /home renders directly (no /onboarding detour).
+    router.push('/home');
     router.refresh();
   };
 
@@ -73,6 +74,30 @@ export default function LoginPage() {
     <main className="min-h-screen grid place-items-center p-6">
       <div className="w-full max-w-sm space-y-5">
         <h1 className="font-serif text-3xl">sign in</h1>
+
+        {devPanelEnabled && (
+          <div className="space-y-2">
+            <button
+              onClick={devLogin}
+              disabled={busy}
+              data-testid="dev-login"
+              className="w-full bg-accent text-white py-4 rounded-xl font-semibold disabled:opacity-50 text-base"
+            >
+              {busy ? 'logging in…' : '🛠  dev login — tap to test'}
+            </button>
+            <div className="text-xs text-ink-mute text-center">
+              no email needed · preset content loaded · 5 min jar
+            </div>
+          </div>
+        )}
+
+        {devPanelEnabled && (
+          <div className="flex items-center gap-3 text-xs text-ink-mute">
+            <div className="h-px bg-line flex-1" />
+            <span>or sign in normally</span>
+            <div className="h-px bg-line flex-1" />
+          </div>
+        )}
 
         {stage === 'email' && (
           <form onSubmit={sendCode} className="space-y-3">
@@ -122,16 +147,6 @@ export default function LoginPage() {
         <button onClick={google} className="w-full bg-bg-2 border border-line py-3 rounded-xl">
           continue with Google
         </button>
-
-        {devPanelEnabled && (
-          <button
-            onClick={devLogin}
-            disabled={busy}
-            className="w-full bg-bg-3 border border-dashed border-accent text-accent py-3 rounded-xl text-sm font-mono disabled:opacity-50"
-          >
-            dev · sign in &amp; restart onboarding
-          </button>
-        )}
       </div>
     </main>
   );
