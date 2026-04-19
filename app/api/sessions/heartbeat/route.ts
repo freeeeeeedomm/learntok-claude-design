@@ -43,24 +43,26 @@ export async function POST(req: Request) {
 
   if (delta > 0 && session.kind === 'learn') {
     credited = delta;
-    await admin.from('ledger_entries').insert({
+    const { error: ledgerError } = await admin.from('ledger_entries').insert({
       user_id: user.id,
       delta_seconds: delta,
       label: 'lesson',
       ref_id: session.lesson_id,
     });
+    if (ledgerError) return NextResponse.json({ error: 'ledger_write_failed' }, { status: 500 });
     await admin.from('sessions').update({
       last_heartbeat_at: nowIso,
       earned_or_spent_seconds: session.earned_or_spent_seconds + delta,
     }).eq('id', session.id);
   } else if (delta > 0 && session.kind === 'feed') {
     credited = -delta;
-    await admin.from('ledger_entries').insert({
+    const { error: ledgerError } = await admin.from('ledger_entries').insert({
       user_id: user.id,
       delta_seconds: -delta,
       label: 'feed',
       ref_id: session.id,
     });
+    if (ledgerError) return NextResponse.json({ error: 'ledger_write_failed' }, { status: 500 });
     const newEarnedOrSpent = session.earned_or_spent_seconds - delta;
     const spent = -newEarnedOrSpent;
     const budget = session.budget_seconds ?? 0;
