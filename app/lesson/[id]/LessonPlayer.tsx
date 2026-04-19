@@ -192,6 +192,19 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     };
   }, [state, playing, isIdle, router]);
 
+  // Client-side 1s tick: while the video is playing (and session is ready),
+  // increment the displayed balance by 1 every second. The heartbeat effect
+  // above overwrites balance with the server-authoritative value every 15s,
+  // so local drift is bounded to one heartbeat window.
+  useEffect(() => {
+    if (state.phase !== 'ready') return;
+    if (!playing || isIdle) return;
+    const id = setInterval(() => {
+      setBalance((b) => b + 1);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state.phase, playing, isIdle]);
+
   useEffect(() => {
     const onHide = () => endSessionBestEffort();
     window.addEventListener('pagehide', onHide);
@@ -237,11 +250,18 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
 
       <div className="pad pad-top col gap-16">
         <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', background: '#000', borderRadius: 12, overflow: 'hidden' }}>
+          {/* allow=fullscreen + allowFullScreen enable the YT fullscreen
+              button. Note: Chrome DevTools device emulation (iPhone / iPad
+              etc.) has a known quirk where the first tap on a cross-origin
+              iframe play button is swallowed, which makes this look broken
+              — it's not. Test in a normal desktop viewport or on a real
+              mobile device. */}
           <iframe
             {...iframeProps}
             src={`https://www.youtube.com/embed/${lesson.ytId}?enablejsapi=1&rel=0&modestbranding=1`}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-            allow="autoplay; encrypted-media"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
             title={lesson.title}
           />
         </div>

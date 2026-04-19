@@ -36,7 +36,7 @@ export default async function HomePage() {
       .order('position', { ascending: true }),
     supabase
       .from('lessons')
-      .select('id, course_id, position, title, duration_seconds')
+      .select('id, course_id, position, title, duration_seconds, yt_id')
       .order('position', { ascending: true }),
     supabase
       .from('lesson_progress')
@@ -55,7 +55,7 @@ export default async function HomePage() {
   // Group lessons by course.
   const lessonsByCourse = new Map<
     string,
-    Array<{ id: string; title: string; duration_seconds: number; done: boolean }>
+    Array<{ id: string; title: string; duration_seconds: number; yt_id: string; done: boolean }>
   >();
   for (const l of lessons) {
     const arr = lessonsByCourse.get(l.course_id) ?? [];
@@ -63,6 +63,7 @@ export default async function HomePage() {
       id: l.id,
       title: l.title,
       duration_seconds: l.duration_seconds,
+      yt_id: l.yt_id,
       done: doneIds.has(l.id),
     });
     lessonsByCourse.set(l.course_id, arr);
@@ -115,6 +116,10 @@ export default async function HomePage() {
   const topicRows = topics.map((t) => {
     const cs = coursesByTopic.get(t.id) ?? [];
     const allLs = cs.flatMap((c) => lessonsByCourse.get(c.id) ?? []);
+    const firstCourse = cs[0];
+    const firstYtId = firstCourse
+      ? (lessonsByCourse.get(firstCourse.id) ?? [])[0]?.yt_id ?? null
+      : null;
     return {
       id: t.id,
       title: t.title,
@@ -123,6 +128,7 @@ export default async function HomePage() {
       courseCount: cs.length,
       lessonCount: allLs.length,
       doneCount: allLs.filter((l) => l.done).length,
+      firstYtId,
     };
   });
 
@@ -193,9 +199,17 @@ export default async function HomePage() {
             >
               <div
                 className="thumb"
-                style={{ background: t.color, color: '#fff' }}
+                style={
+                  t.firstYtId
+                    ? {
+                        backgroundImage: `url(https://i.ytimg.com/vi/${t.firstYtId}/default.jpg)`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : { background: t.color, color: '#fff' }
+                }
               >
-                {t.icon}
+                {t.firstYtId ? '' : t.icon}
               </div>
               <div className="grow col">
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{t.title}</div>
