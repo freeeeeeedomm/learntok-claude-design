@@ -24,13 +24,16 @@ export default async function HomePage() {
 
   if (!profile?.onboarded) redirect('/onboarding');
 
-  const [coursesRes, lessonsRes, progressRes] = await Promise.all([
+  const [topicsRes, coursesRes, lessonsRes, progressRes] = await Promise.all([
+    supabase
+      .from('topics')
+      .select('id, title, icon, color, position, is_preset')
+      .order('is_preset', { ascending: false })
+      .order('position', { ascending: true }),
     supabase
       .from('courses')
-      .select('id, title, topic, icon, is_preset, created_at')
-      // presets first, then user's own in creation order
-      .order('is_preset', { ascending: false })
-      .order('created_at', { ascending: true }),
+      .select('id, topic_id, title, icon, position, is_preset')
+      .order('position', { ascending: true }),
     supabase
       .from('lessons')
       .select('id, course_id, position, title, duration_seconds')
@@ -41,6 +44,7 @@ export default async function HomePage() {
       .eq('user_id', user.id),
   ]);
 
+  const topics = topicsRes.data ?? [];
   const courses = coursesRes.data ?? [];
   const lessons = lessonsRes.data ?? [];
   const progress = progressRes.data ?? [];
@@ -48,7 +52,7 @@ export default async function HomePage() {
     progress.filter((p) => p.completed_at).map((p) => p.lesson_id)
   );
 
-  // Group lessons by course, preserving position order.
+  // Group lessons by course.
   const lessonsByCourse = new Map<
     string,
     Array<{ id: string; title: string; duration_seconds: number; done: boolean }>
@@ -64,9 +68,20 @@ export default async function HomePage() {
     lessonsByCourse.set(l.course_id, arr);
   }
 
-  // "Continue" course: first (by listed order) that has an undone lesson.
+  // Group courses by topic.
+  const coursesByTopic = new Map<string, typeof courses>();
+  for (const c of courses) {
+    if (!c.topic_id) continue;
+    const arr = coursesByTopic.get(c.topic_id) ?? [];
+    arr.push(c);
+    coursesByTopic.set(c.topic_id, arr);
+  }
+
+  // Continue card: walk topics in order, find the first topic whose first
+  // course has an undone lesson. Deep enough: one level of topic, one course.
   let continueCard: {
-    courseId: string;
+    topicId: string;
+    topicTitle: string;
     courseTitle: string;
     total: number;
     done: number;
@@ -74,22 +89,42 @@ export default async function HomePage() {
     nextTitle: string;
     nextDur: number;
   } | null = null;
-  for (const c of courses) {
-    const ls = lessonsByCourse.get(c.id) ?? [];
-    if (ls.length === 0) continue;
-    const next = ls.find((l) => !l.done);
-    if (!next) continue;
-    continueCard = {
-      courseId: c.id,
-      courseTitle: c.title,
-      total: ls.length,
-      done: ls.filter((l) => l.done).length,
-      nextId: next.id,
-      nextTitle: next.title,
-      nextDur: next.duration_seconds,
-    };
-    break;
+
+  outer: for (const t of topics) {
+    const courseList = coursesByTopic.get(t.id) ?? [];
+    for (const c of courseList) {
+      const ls = lessonsByCourse.get(c.id) ?? [];
+      if (ls.length === 0) continue;
+      const next = ls.find((l) => !l.done);
+      if (!next) continue;
+      continueCard = {
+        topicId: t.id,
+        topicTitle: t.title,
+        courseTitle: c.title,
+        total: ls.length,
+        done: ls.filter((l) => l.done).length,
+        nextId: next.id,
+        nextTitle: next.title,
+        nextDur: next.duration_seconds,
+      };
+      break outer;
+    }
   }
+
+  // For each topic: aggregate counts across its courses.
+  const topicRows = topics.map((t) => {
+    const cs = coursesByTopic.get(t.id) ?? [];
+    const allLs = cs.flatMap((c) => lessonsByCourse.get(c.id) ?? []);
+    return {
+      id: t.id,
+      title: t.title,
+      icon: t.icon ?? '📚',
+      color: t.color ?? '#5e6ad2',
+      courseCount: cs.length,
+      lessonCount: allLs.length,
+      doneCount: allLs.filter((l) => l.done).length,
+    };
+  });
 
   const weekday = new Date()
     .toLocaleDateString('en', { weekday: 'long' })
@@ -124,7 +159,7 @@ export default async function HomePage() {
             style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
             data-testid="home-continue-card"
           >
-            <div className="eyebrow">continue</div>
+            <div className="eyebrow">continue · {continueCard.topicTitle}</div>
             <div className="display mt-4" style={{ fontSize: 22 }}>
               {continueCard.courseTitle}
             </div>
@@ -146,52 +181,31 @@ export default async function HomePage() {
           </a>
         )}
 
-        <a
-          href="/budget"
-          className="card mt-16"
-          style={{
-            display: 'block',
-            textDecoration: 'none',
-            color: 'inherit',
-            borderStyle: 'dashed',
-          }}
-          data-testid="home-take-break"
-        >
-          <div className="row between aic">
-            <div>
-              <div className="eyebrow">take a break</div>
-              <div style={{ fontWeight: 600, fontSize: 15, marginTop: 2 }}>
-                spend some jar time scrolling
-              </div>
-            </div>
-            <div style={{ color: 'var(--ink-mute)', fontSize: 18 }}>›</div>
-          </div>
-        </a>
-
         <div className="eyebrow mt-24">your topics</div>
         <div className="col gap-8 mt-8">
-          {courses.map((c) => {
-            const ls = lessonsByCourse.get(c.id) ?? [];
-            const done = ls.filter((l) => l.done).length;
-            return (
-              <a
-                key={c.id}
-                href={`/course/${c.id}`}
-                className="lesson-row"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-                data-testid={`home-course-${c.id}`}
+          {topicRows.map((t) => (
+            <a
+              key={t.id}
+              href={`/topic/${t.id}`}
+              className="lesson-row"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+              data-testid={`home-topic-${t.id}`}
+            >
+              <div
+                className="thumb"
+                style={{ background: t.color, color: '#fff' }}
               >
-                <div className="thumb">{c.icon ?? '📚'}</div>
-                <div className="grow col">
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.title}</div>
-                  <div className="body" style={{ fontSize: 11 }}>
-                    {done}/{ls.length} lessons{c.topic ? ` · ${c.topic}` : ''}
-                  </div>
+                {t.icon}
+              </div>
+              <div className="grow col">
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t.title}</div>
+                <div className="body" style={{ fontSize: 11 }}>
+                  {t.courseCount} courses · {t.doneCount}/{t.lessonCount} lessons
                 </div>
-                <div style={{ color: 'var(--ink-mute)' }}>›</div>
-              </a>
-            );
-          })}
+              </div>
+              <div style={{ color: 'var(--ink-mute)' }}>›</div>
+            </a>
+          ))}
           <a
             href="/add"
             className="lesson-row"
