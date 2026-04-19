@@ -202,7 +202,7 @@ export default async function HomePage() {
                 style={
                   t.firstYtId
                     ? {
-                        backgroundImage: `url(https://i.ytimg.com/vi/${t.firstYtId}/mqdefault.jpg)`,
+                        backgroundImage: `url(https://i.ytimg.com/vi/${t.firstYtId}/default.jpg)`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                       }

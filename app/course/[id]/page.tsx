@@ -160,7 +160,7 @@ export default async function CoursePage({ params }: Params) {
                 <div
                   className="thumb"
                   style={{
-                    backgroundImage: `url(https://i.ytimg.com/vi/${l.yt_id}/mqdefault.jpg)`,
+                    backgroundImage: `url(https://i.ytimg.com/vi/${l.yt_id}/default.jpg)`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                   }}
