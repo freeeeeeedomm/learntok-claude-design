@@ -11,10 +11,15 @@ test('lesson page: renders chrome and mark-done writes progress', async ({ page 
   const { data: users } = await a.auth.admin.listUsers();
   const userId = users.users.find((u) => u.email === email)!.id;
 
-  // Clear any prior progress for idempotency.
-  await a.from('lesson_progress').delete().eq('user_id', userId);
-
   const lessonId = await anyPresetLessonId();
+
+  // Clear prior progress for THIS lesson only, so a separate test that
+  // may have populated progress for other lessons doesn't get wiped.
+  await a
+    .from('lesson_progress')
+    .delete()
+    .eq('user_id', userId)
+    .eq('lesson_id', lessonId);
 
   // 2. Navigate.
   await page.goto(`/lesson/${lessonId}`);

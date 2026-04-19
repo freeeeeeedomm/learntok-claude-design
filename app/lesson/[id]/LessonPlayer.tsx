@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useYouTubePlayer } from '@/hooks/use-youtube-player';
 import { useIdleDetection } from '@/hooks/use-idle-detection';
 
+// Client heartbeat cadence. Coupled to server invariants:
+//   - MAX_CREDIT_PER_HEARTBEAT = 20s in /api/sessions/heartbeat
+//   - the orphan-close gap tolerance in /api/sessions/start
+// Changing this without updating those constants will break the credit
+// model. Grep for the constant name before touching.
+const HEARTBEAT_INTERVAL_MS = 15_000;
+
 export type LessonPlayerProps = {
   lesson: {
     id: string;
@@ -70,7 +77,12 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
     };
   }, [state.phase, lesson.id]);
 
-  const { isIdle, acknowledge } = useIdleDetection({ active: !playing });
+  // Only tick the idle counter once the session is ready — otherwise a
+  // slow /api/sessions/start could let isIdle latch before the first
+  // heartbeat even fires.
+  const { isIdle, acknowledge } = useIdleDetection({
+    active: !playing && state.phase === 'ready',
+  });
 
   const markDone = async () => {
     if (submitting || state.phase !== 'ready') return;
@@ -157,20 +169,28 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
           body: JSON.stringify({ sessionId, playing: playing && !isIdle }),
         });
         if (cancelled || !res.ok) return;
-        const body: { balance?: number } = await res.json();
+        const body: { balance?: number; ended?: boolean } = await res.json();
         if (typeof body.balance === 'number') setBalance(body.balance);
+        // Defensive: a learn session never force-ends today (only feed
+        // sessions hit the budget-exhausted path), but if that ever
+        // changes, bail to home so the user isn't staring at a frozen
+        // balance while the interval keeps polling a closed session.
+        if (body.ended) {
+          endedRef.current = true;
+          router.push('/home');
+        }
       } catch {
         // single blip — next tick retries
       }
     };
 
     tick(); // establish anchor immediately
-    const id = setInterval(tick, 15_000);
+    const id = setInterval(tick, HEARTBEAT_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [state, playing, isIdle]);
+  }, [state, playing, isIdle, router]);
 
   useEffect(() => {
     const onHide = () => endSessionBestEffort();
@@ -207,6 +227,10 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
   return (
     <main className="app">
       <div className="row between aic" style={{ position: 'fixed', top: 0, left: 0, right: 0, padding: 16, zIndex: 10 }}>
+        {/* Plain <a> (not next/link) so the back button triggers a full
+            navigation, which fires `pagehide` and lets
+            endSessionBestEffort close the session. Swapping to <Link>
+            would silently leak open sessions. */}
         <a href="/home" style={{ fontSize: 24, color: 'var(--ink-soft)' }}>‹</a>
         <div className="chip" data-testid="jar-chip">{fmtBalance(balance)}</div>
       </div>
