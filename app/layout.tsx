@@ -1,7 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { BottomNav } from '@/components/nav/BottomNav';
-import { NibsBall } from '@/components/characters/NibsBall';
+import { NibsLayer } from '@/components/characters/NibsLayer';
 
 export const metadata: Metadata = {
   title: 'LearnTok',
@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <BottomNav />
-        <NibsBall />
+        <NibsLayer />
       </body>
     </html>
   );
