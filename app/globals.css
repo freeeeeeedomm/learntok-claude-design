@@ -194,6 +194,86 @@ html, body {
     font-size: 22px; cursor: pointer; color: var(--ink-soft);
     width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
+    text-decoration: none;
+  }
+
+  /* Sheet overlay (idle / angel / settings) */
+  .sheet-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(6px);
+    z-index: 30;
+    display: flex; align-items: flex-end;
+    animation: fadein 0.2s;
+  }
+  .sheet {
+    width: 100%; background: var(--bg);
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px 32px;
+    border-top: 1px solid var(--line);
+    max-height: 88%; overflow-y: auto;
+  }
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    margin: -8px auto 16px;
+  }
+
+  /* TikTok-style feed shell */
+  .feed {
+    position: fixed; inset: 0;
+    background: #000; color: #fff;
+    overflow: hidden;
+  }
+  .feed-video {
+    position: absolute; inset: 0;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .feed-video iframe {
+    width: 100%; height: 100%; border: 0;
+    pointer-events: none;
+  }
+  .feed-top-bar {
+    position: absolute; top: 50px; left: 16px; right: 16px;
+    height: 3px; background: rgba(255,255,255,0.15);
+    border-radius: 2px; overflow: hidden; z-index: 10;
+  }
+  .feed-top-bar > i {
+    display: block; height: 100%;
+    background: var(--angel);
+    transition: width 0.5s linear;
+  }
+  .feed-top-chip {
+    position: absolute; top: 60px; right: 16px;
+    background: rgba(0,0,0,0.4);
+    padding: 4px 10px; border-radius: 99px;
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: #fff; z-index: 10;
+  }
+  .feed-overlay-info {
+    position: absolute; left: 16px; right: 80px; bottom: 96px;
+    color: #fff; z-index: 5;
+  }
+  .feed-side {
+    position: absolute; right: 12px; bottom: 100px;
+    display: flex; flex-direction: column; gap: 18px;
+    z-index: 10;
+  }
+  .feed-side .icon-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: #fff;
+    border: none; cursor: pointer;
+  }
+  .feed-side .icon-btn:hover { background: rgba(255,255,255,0.25); }
+
+  /* "Done now" bottom bar on the feed */
+  .feed-done-bar {
+    position: absolute; left: 16px; right: 16px; bottom: 20px;
+    z-index: 15;
   }
 }
 
