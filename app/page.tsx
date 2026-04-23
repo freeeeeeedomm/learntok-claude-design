@@ -36,8 +36,12 @@ const CHAPTERS: ChapterCopy[] = [
     tint: 'cold',
   },
   {
-    big: <>You can have both.</>,
-    small: 'LearnTok: learn a little, scroll a little.',
+    big: (
+      <>
+        LearnTok finds the <em>balance point.</em>
+      </>
+    ),
+    small: 'Learn a little, scroll a little.',
     video: '/videos/Scene4.mp4',
     tint: 'warm',
   },
