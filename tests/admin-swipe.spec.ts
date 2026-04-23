@@ -68,3 +68,35 @@ test('admin swipe: enter → navigate → exit', async ({ page }) => {
   await expect(page.getByTestId('admin-swipe-view')).toHaveCount(0);
   await expect(page.getByTestId('admin-video-grid')).toBeVisible();
 });
+
+test('admin swipe: delete + undo within 3s → DB unchanged', async ({ page }) => {
+  await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
+
+  await page.goto('/admin');
+  await page.getByTestId('admin-tab-喜剧').click();
+  await page.getByTestId('admin-review-enter').click();
+
+  // Confirm we're on video 1/3.
+  await expect(page.getByTestId('admin-swipe-progress')).toContainText('喜剧 · 1/3');
+
+  // Click delete — toast appears, progress advances.
+  await page.getByTestId('admin-swipe-delete').click();
+  await expect(page.getByTestId('admin-swipe-undo')).toBeVisible();
+  await expect(page.getByTestId('admin-swipe-progress')).toContainText('喜剧 · 2/3');
+
+  // Click undo inside the 3s window.
+  await page.getByTestId('admin-swipe-undo').click();
+  await expect(page.getByTestId('admin-swipe-undo')).toHaveCount(0);
+
+  // Wait longer than what would have been the commit timer.
+  await page.waitForTimeout(3500);
+
+  // DB unchanged — all 3 rows still is_active = true.
+  const a = svcAdmin();
+  const { data: rows } = await a
+    .from('video_pool')
+    .select('video_id, is_active')
+    .in('video_id', TEST_VIDEO_IDS);
+  expect(rows?.length).toBe(3);
+  expect(rows?.every((r) => r.is_active)).toBe(true);
+});

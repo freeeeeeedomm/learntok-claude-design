@@ -117,6 +117,57 @@ export function AdminSwipeView({
     [navigable, currentId]
   );
 
+  const triggerDelete = useCallback(() => {
+    if (!current || pendingDelete) return;
+    const target = current;
+    // Visually slide to the next video.
+    setSlideDirection('up');
+    const sliceTimer = setTimeout(() => {
+      // Next video = the first video in `originalVids` AFTER target that
+      // isn't already committed-deleted. (target is about to become pending;
+      // we exclude it explicitly.)
+      const targetOrigIdx = originalVids.findIndex((v) => v.id === target.id);
+      let nextId: string | null = null;
+      for (let i = targetOrigIdx + 1; i < originalVids.length; i++) {
+        const v = originalVids[i];
+        if (v.id !== target.id && !committedIds.has(v.id)) {
+          nextId = v.id;
+          break;
+        }
+      }
+      // If nothing forward, try backward (preserves the "always show
+      // something if possible" UX; falling through to null lands on end card).
+      if (nextId === null) {
+        for (let i = targetOrigIdx - 1; i >= 0; i--) {
+          const v = originalVids[i];
+          if (v.id !== target.id && !committedIds.has(v.id)) {
+            nextId = v.id;
+            break;
+          }
+        }
+      }
+      setCurrentId(nextId);
+      setSlideDirection('none');
+    }, 300);
+
+    // Kick off the 3-second commit timer. (Actual onCommitDelete call lands in Task 3.)
+    const commitTimer = setTimeout(() => {
+      setPendingDelete(null);
+      // Task 3 will: setCommittedIds((s) => new Set(s).add(target.id)); onCommitDelete(target.id);
+    }, 3000);
+
+    setPendingDelete({ video: target, timerId: commitTimer });
+
+    // Defensive cleanup — if component unmounts while slice is in flight.
+    return () => clearTimeout(sliceTimer);
+  }, [current, pendingDelete, originalVids, committedIds]);
+
+  const cancelPendingDelete = useCallback(() => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timerId);
+    setPendingDelete(null);
+  }, [pendingDelete]);
+
   const onOverlayWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       if (Math.abs(e.deltaY) < 30) return;
@@ -252,7 +303,27 @@ export function AdminSwipeView({
         >
           {progressLabel}
         </div>
-        <div style={{ width: 40, height: 40 }} /> {/* placeholder — 🗑 in Task 2 */}
+        <button
+          type="button"
+          onClick={triggerDelete}
+          disabled={!current || !!pendingDelete}
+          data-testid="admin-swipe-delete"
+          aria-label="delete video"
+          style={{
+            pointerEvents: 'auto',
+            width: 40,
+            height: 40,
+            borderRadius: 999,
+            border: 'none',
+            background: 'rgba(0,0,0,0.45)',
+            color: 'var(--bad)',
+            fontSize: 20,
+            cursor: 'pointer',
+            opacity: !current || !!pendingDelete ? 0.5 : 1,
+          }}
+        >
+          🗑
+        </button>
       </div>
 
       {/* End-of-list card (shown when isAtEnd) — wired in Task 3. Task 1 is a no-op path. */}
@@ -285,6 +356,54 @@ export function AdminSwipeView({
               onClick={handleExit}
             >
               回列表
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingDelete && (
+        <div
+          style={{
+            position: 'fixed',
+            left: 16,
+            right: 16,
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 88px)',
+            display: 'flex',
+            justifyContent: 'center',
+            zIndex: 50,
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              pointerEvents: 'auto',
+              background: 'rgba(0,0,0,0.85)',
+              color: '#fff',
+              padding: '10px 16px',
+              borderRadius: 999,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              fontSize: 13,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.4)',
+            }}
+          >
+            <span>已删除</span>
+            <button
+              type="button"
+              onClick={cancelPendingDelete}
+              data-testid="admin-swipe-undo"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--angel)',
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              撤回
             </button>
           </div>
         </div>
