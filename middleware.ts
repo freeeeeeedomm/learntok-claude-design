@@ -25,7 +25,11 @@ export async function middleware(req: NextRequest) {
     path === '/' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/public') ||
-    path.startsWith('/api/dev');
+    path.startsWith('/api/dev') ||
+    // Static assets used by the public landing page.
+    path.startsWith('/videos/') ||
+    path.startsWith('/scenes/') ||
+    path.startsWith('/characters/');
 
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url));
