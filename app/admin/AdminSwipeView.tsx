@@ -45,6 +45,14 @@ export function AdminSwipeView({
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Tracks whether the current pendingDelete has already been resolved
+  // (committed by timer, cancelled by undo, or flushed by exit). The
+  // unmount-cleanup effect uses this to avoid double-firing onCommitDelete
+  // when pendingDelete transitions from {…} → null as part of a normal
+  // state resolution (not an actual unmount). Keyed to the pending object
+  // so a fresh pending starts with a fresh flag.
+  const pendingResolvedRef = useRef(false);
+
   const pendingId = pendingDelete?.video.id ?? null;
 
   // Navigable = originalVids minus pending (temporary) and committed (permanent).
@@ -150,21 +158,33 @@ export function AdminSwipeView({
       setSlideDirection('none');
     }, 300);
 
-    // Kick off the 3-second commit timer. (Actual onCommitDelete call lands in Task 3.)
+    // Kick off the 3-second commit timer — fires the real PATCH via parent,
+    // and records the committed id locally so the user can't swipe back
+    // into the deleted video even if the parent's prop hasn't re-propagated yet.
     const commitTimer = setTimeout(() => {
+      pendingResolvedRef.current = true;
       setPendingDelete(null);
-      // Task 3 will: setCommittedIds((s) => new Set(s).add(target.id)); onCommitDelete(target.id);
+      setCommittedIds((s) => {
+        const n = new Set(s);
+        n.add(target.id);
+        return n;
+      });
+      onCommitDelete(target.id);
     }, 3000);
 
+    // Fresh pending — reset the resolved flag so the unmount cleanup
+    // will flush if the component goes away before the user resolves it.
+    pendingResolvedRef.current = false;
     setPendingDelete({ video: target, timerId: commitTimer });
 
     // Defensive cleanup — if component unmounts while slice is in flight.
     return () => clearTimeout(sliceTimer);
-  }, [current, pendingDelete, originalVids, committedIds]);
+  }, [current, pendingDelete, originalVids, committedIds, onCommitDelete]);
 
   const cancelPendingDelete = useCallback(() => {
     if (!pendingDelete) return;
     clearTimeout(pendingDelete.timerId);
+    pendingResolvedRef.current = true;
     setPendingDelete(null);
   }, [pendingDelete]);
 
@@ -210,21 +230,42 @@ export function AdminSwipeView({
     [commitSwipe]
   );
 
-  // Unmount cleanup: ensure the tap-hide and slide timers don't fire after
-  // the component is gone (avoids setState-on-unmounted warnings).
+  // Unmount cleanup:
+  //  - tap-hide + slide timers: avoid setState-on-unmounted warnings
+  //  - pending delete: flush the PATCH if the component unmounts mid-pending
+  //    (e.g. parent-driven rerender), so the optimistic UI doesn't lie.
+  //
+  // The cleanup runs on every re-run of this effect (i.e. every time the
+  // deps change), not just on unmount. That means when pendingDelete
+  // transitions {…} → null via normal resolution (timer commits, user
+  // clicks undo, user hits ✕), the cleanup would fire for the OLD pending
+  // value — and without a guard that would re-commit a cancelled delete.
+  // The `pendingResolvedRef` flag distinguishes: resolved → skip flush;
+  // unresolved → the component is being torn down mid-pending, flush.
   useEffect(() => {
     return () => {
       if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
       if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
+      if (pendingDelete && !pendingResolvedRef.current) {
+        clearTimeout(pendingDelete.timerId);
+        onCommitDelete(pendingDelete.video.id);
+      }
     };
-  }, []);
+  }, [pendingDelete, onCommitDelete]);
 
   // Exit with a pending-delete flush (Task 3 will wire commit;
   // in Task 1 pending is always null so this is effectively just onExit).
   const handleExit = () => {
     if (pendingDelete) {
       clearTimeout(pendingDelete.timerId);
-      onCommitDelete(pendingDelete.video.id);
+      const id = pendingDelete.video.id;
+      setCommittedIds((s) => {
+        const n = new Set(s);
+        n.add(id);
+        return n;
+      });
+      onCommitDelete(id);
+      pendingResolvedRef.current = true;
       setPendingDelete(null);
     }
     onExit();

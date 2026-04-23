@@ -100,3 +100,51 @@ test('admin swipe: delete + undo within 3s → DB unchanged', async ({ page }) =
   expect(rows?.length).toBe(3);
   expect(rows?.every((r) => r.is_active)).toBe(true);
 });
+
+test('admin swipe: delete + timeout → soft-delete persisted + grid shrinks', async ({
+  page,
+}) => {
+  await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
+
+  await page.goto('/admin');
+  await page.getByTestId('admin-tab-喜剧').click();
+  await page.getByTestId('admin-review-enter').click();
+
+  // Identify which video is shown first (depends on created_at desc order,
+  // which for the 3 beforeEach-inserted rows matches the insertion order's
+  // reverse — the LAST inserted is newest = first. Don't assume, read from DOM.)
+  const iframeSrc1 = await page
+    .getByTestId('admin-swipe-current')
+    .locator('iframe')
+    .getAttribute('src');
+  const deletedId = TEST_VIDEO_IDS.find((id) => iframeSrc1!.includes(id));
+  expect(deletedId, 'iframe src should match one of the seeded video_ids').toBeTruthy();
+
+  await page.getByTestId('admin-swipe-delete').click();
+  await expect(page.getByTestId('admin-swipe-undo')).toBeVisible();
+
+  // Past the 3s commit window.
+  await page.waitForTimeout(3500);
+
+  // Toast gone, PATCH fired.
+  await expect(page.getByTestId('admin-swipe-undo')).toHaveCount(0);
+
+  // Verify DB: deleted row is now is_active = false.
+  const a = svcAdmin();
+  const { data: row } = await a
+    .from('video_pool')
+    .select('is_active')
+    .eq('video_id', deletedId!)
+    .single();
+  expect(row?.is_active).toBe(false);
+
+  // Exit → grid should show only 2 cards (the other 2 seeded rows).
+  await page.getByTestId('admin-swipe-exit').click();
+  await expect(page.getByTestId('admin-swipe-view')).toHaveCount(0);
+  await expect(page.getByTestId(`admin-video-card-${deletedId}`)).toHaveCount(0);
+
+  const otherIds = TEST_VIDEO_IDS.filter((id) => id !== deletedId);
+  for (const id of otherIds) {
+    await expect(page.getByTestId(`admin-video-card-${id}`)).toBeVisible();
+  }
+});
