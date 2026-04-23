@@ -231,7 +231,15 @@ export function AdminSwipeView({
   };
 
   return (
-    <div className="feed" data-testid="admin-swipe-view">
+    <div
+      className="feed"
+      // Above BottomNav (z-index: 40). The shared .feed class has no
+      // z-index, so rely on inline style — we don't want to bump the
+      // CSS class because /feed has its own BottomNav hiding via
+      // HIDE_PATTERNS and doesn't need the bump.
+      style={{ zIndex: 45 }}
+      data-testid="admin-swipe-view"
+    >
       <div
         className={`feed-video ${slideDirection !== 'none' ? `feed-slide-${slideDirection}` : ''}`}
         data-testid="admin-swipe-current"
