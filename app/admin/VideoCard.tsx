@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { VideoEmbed } from '@/components/feed/VideoEmbed';
 
 export interface AdminVideo {
@@ -25,6 +26,26 @@ export function VideoCard({
   onDelete: () => void;
   deleting: boolean;
 }) {
+  // Try the proxy first (always fresh), fall back to the stored signed
+  // URL (may be expired), then give up and show a neutral placeholder.
+  const proxyUrl =
+    video.source === 'tiktok'
+      ? `/api/admin/video-pool/thumbnail/${video.video_id}`
+      : null;
+  const [imgSrc, setImgSrc] = useState<string | null>(
+    proxyUrl ?? video.thumbnail_url
+  );
+  const [fellBack, setFellBack] = useState(false);
+
+  const handleImgError = () => {
+    if (!fellBack && proxyUrl && video.thumbnail_url) {
+      setImgSrc(video.thumbnail_url);
+      setFellBack(true);
+      return;
+    }
+    setImgSrc(null);
+  };
+
   return (
     <div
       className="card col gap-8"
@@ -47,11 +68,14 @@ export function VideoCard({
       >
         {expanded ? (
           <VideoEmbed source={video.source} videoId={video.video_id} fillHeight />
-        ) : video.thumbnail_url ? (
+        ) : imgSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={video.thumbnail_url}
-            alt={video.title ?? video.video_id}
+            src={imgSrc}
+            alt={video.author ? `@${video.author}` : video.video_id}
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            onError={handleImgError}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (
@@ -68,11 +92,16 @@ export function VideoCard({
           </div>
         )}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
-        {video.title ?? video.video_id}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--ink-mute)' }}>
-        {video.author ? `@${video.author}` : video.category}
+      <div
+        style={{
+          fontSize: 12,
+          color: 'var(--ink)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {video.author ? `@${video.author}` : '—'}
       </div>
       <div className="row gap-8">
         <button
