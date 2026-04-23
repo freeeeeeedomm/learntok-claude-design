@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VideoEmbed } from '@/components/feed/VideoEmbed';
 import type { AdminVideo } from './VideoCard';
 
@@ -43,6 +43,7 @@ export function AdminSwipeView({
   const lastSwipeRef = useRef(0);
   const pointerStart = useRef<{ y: number; t: number } | null>(null);
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pendingId = pendingDelete?.video.id ?? null;
 
@@ -83,7 +84,8 @@ export function AdminSwipeView({
       if (now - lastSwipeRef.current < 800) return; // throttle
       lastSwipeRef.current = now;
       setSlideDirection(direction > 0 ? 'up' : 'down');
-      setTimeout(() => {
+      if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
+      slideTimerRef.current = setTimeout(() => {
         // Resolve the next currentId from the navigable list.
         if (currentId === null) {
           // At end. Swipe up = go back to last navigable. Swipe down = stay.
@@ -109,6 +111,7 @@ export function AdminSwipeView({
           }
         }
         setSlideDirection('none');
+        slideTimerRef.current = null;
       }, 300);
     },
     [navigable, currentId]
@@ -155,6 +158,15 @@ export function AdminSwipeView({
     },
     [commitSwipe]
   );
+
+  // Unmount cleanup: ensure the tap-hide and slide timers don't fire after
+  // the component is gone (avoids setState-on-unmounted warnings).
+  useEffect(() => {
+    return () => {
+      if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+      if (slideTimerRef.current) clearTimeout(slideTimerRef.current);
+    };
+  }, []);
 
   // Exit with a pending-delete flush (Task 3 will wire commit;
   // in Task 1 pending is always null so this is effectively just onExit).
