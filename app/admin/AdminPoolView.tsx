@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { VideoCard, type AdminVideo } from './VideoCard';
+import { AdminSwipeView } from './AdminSwipeView';
 
 const ALL = '__all__';
 
@@ -16,6 +17,7 @@ export function AdminPoolView({
   const [activeCat, setActiveCat] = useState<string>(ALL);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [swipeMode, setSwipeMode] = useState(false);
 
   const filtered = useMemo(
     () => (activeCat === ALL ? videos : videos.filter((v) => v.category === activeCat)),
@@ -65,65 +67,93 @@ export function AdminPoolView({
 
   return (
     <div className="col gap-16 mt-16">
-      <div
-        className="row gap-8"
-        style={{ overflowX: 'auto', paddingBottom: 4 }}
-        data-testid="admin-category-tabs"
-      >
-        <CategoryTab
-          slug={ALL}
-          label={`全部 ${videos.length}`}
-          active={activeCat === ALL}
-          onClick={() => setActiveCat(ALL)}
+      {swipeMode ? (
+        <AdminSwipeView
+          vids={filtered}
+          categoryLabel={activeCat === ALL ? '全部' : activeCat}
+          onExit={() => setSwipeMode(false)}
+          onCommitDelete={onDelete}
         />
-        {categories.map((c) => (
-          <CategoryTab
-            key={c.slug}
-            slug={c.slug}
-            label={`${c.slug} ${countByCat.get(c.slug) ?? 0}`}
-            active={activeCat === c.slug}
-            onClick={() => setActiveCat(c.slug)}
-          />
-        ))}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div
-          className="card body"
-          style={{ color: 'var(--ink-mute)', textAlign: 'center' }}
-          data-testid="admin-empty"
-        >
-          no videos in this category yet. run{' '}
-          <code>npm run scrape:tiktok</code> to populate.
-        </div>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-            gap: 12,
-          }}
-          data-testid="admin-video-grid"
-        >
-          {filtered.map((v) => (
-            <VideoCard
-              key={v.id}
-              video={v}
-              expanded={expandedId === v.id}
-              onToggleExpand={() => setExpandedId(expandedId === v.id ? null : v.id)}
-              onDelete={() => onDelete(v.id)}
-              deleting={deletingIds.has(v.id)}
+        <>
+          <div
+            className="row gap-8"
+            style={{ overflowX: 'auto', paddingBottom: 4 }}
+            data-testid="admin-category-tabs"
+          >
+            <CategoryTab
+              slug={ALL}
+              label={`全部 ${videos.length}`}
+              active={activeCat === ALL}
+              onClick={() => setActiveCat(ALL)}
             />
-          ))}
-        </div>
-      )}
+            {categories.map((c) => (
+              <CategoryTab
+                key={c.slug}
+                slug={c.slug}
+                label={`${c.slug} ${countByCat.get(c.slug) ?? 0}`}
+                active={activeCat === c.slug}
+                onClick={() => setActiveCat(c.slug)}
+              />
+            ))}
+          </div>
 
-      <div
-        className="body"
-        style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center' }}
-      >
-        💡 池子腻了？本地跑 <code>npm run scrape:tiktok</code> 补货。
-      </div>
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setSwipeMode(true)}
+              disabled={filtered.length === 0}
+              data-testid="admin-review-enter"
+              style={{
+                fontSize: 12,
+                padding: '6px 12px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              🎬 审一遍
+            </button>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div
+              className="card body"
+              style={{ color: 'var(--ink-mute)', textAlign: 'center' }}
+              data-testid="admin-empty"
+            >
+              no videos in this category yet. run{' '}
+              <code>npm run scrape:tiktok</code> to populate.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                gap: 12,
+              }}
+              data-testid="admin-video-grid"
+            >
+              {filtered.map((v) => (
+                <VideoCard
+                  key={v.id}
+                  video={v}
+                  expanded={expandedId === v.id}
+                  onToggleExpand={() => setExpandedId(expandedId === v.id ? null : v.id)}
+                  onDelete={() => onDelete(v.id)}
+                  deleting={deletingIds.has(v.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          <div
+            className="body"
+            style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center' }}
+          >
+            💡 池子腻了？本地跑 <code>npm run scrape:tiktok</code> 补货。
+          </div>
+        </>
+      )}
     </div>
   );
 }
