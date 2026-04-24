@@ -18,15 +18,15 @@ export async function middleware(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = req.nextUrl.pathname;
-  const isAuthRoute = path.startsWith('/login') || path.startsWith('/auth');
-  // /api/dev/* is gated server-side by NEXT_PUBLIC_DEV_PANEL; let it through here
-  // so the login page can call it before a session exists.
+  const isAuthRoute =
+    path.startsWith('/login') ||
+    path.startsWith('/signup') ||
+    path.startsWith('/auth');
   const isPublic =
     path === '/' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/public') ||
     path.startsWith('/api/dev') ||
-    // Static assets used by the public landing page.
     path.startsWith('/videos/') ||
     path.startsWith('/scenes/') ||
     path.startsWith('/characters/');
@@ -34,7 +34,7 @@ export async function middleware(req: NextRequest) {
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
-  if (user && isAuthRoute) {
+  if (user && isAuthRoute && path !== '/auth/reset') {
     return NextResponse.redirect(new URL('/home', req.url));
   }
 
