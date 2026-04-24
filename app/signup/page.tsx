@@ -69,6 +69,7 @@ export default function SignupPage() {
   const resend = async () => {
     setBusy(true);
     setError(null);
+    await supabase.auth.signOut();
     const { error } = await supabase.auth.resend({ type: 'signup', email });
     setBusy(false);
     if (error) setError(error.message);
