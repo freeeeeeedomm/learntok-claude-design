@@ -37,8 +37,16 @@ export default async function FeedPage({
     .select('video_id, source, title, category')
     .eq('is_active', true);
 
-  // Server-side shuffle so each session gets a different order.
-  const shuffled = [...(vids ?? [])].sort(() => Math.random() - 0.5);
+  // Fisher-Yates shuffle. The earlier .sort(() => Math.random() - 0.5)
+  // is biased — V8's TimSort revisits pairs and the comparator isn't a
+  // proper ordering, so earlier elements cluster near the front. With
+  // 357 videos we'd see the same ~5 up top on repeat entries. F-Y
+  // gives uniformly random permutations so each session truly differs.
+  const shuffled = [...(vids ?? [])];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
 
   return <FeedPlayer sessionId={sessionId} budgetSeconds={budget} vids={shuffled} />;
 }
