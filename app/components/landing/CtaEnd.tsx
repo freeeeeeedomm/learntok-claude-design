@@ -16,7 +16,7 @@ export default function CtaEnd({ reduce }: { reduce: boolean }) {
           <h2>
             Make your time <em>count.</em>
           </h2>
-          <a className="cta-btn" href="/login" aria-label="Open LearnTok">
+          <a className="cta-btn" href="/signup" aria-label="Open LearnTok">
             Open LearnTok
             <span className="arrow" aria-hidden />
           </a>
