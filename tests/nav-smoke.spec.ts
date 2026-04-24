@@ -1,4 +1,25 @@
 import { test, expect } from '@playwright/test';
+import { admin as svcAdmin } from './helpers/session';
+
+const SEED_VIDS = ['6666666666000000001'];
+
+test.beforeAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+  await a.from('video_pool').insert(
+    SEED_VIDS.map((v) => ({
+      video_id: v,
+      source: 'tiktok' as const,
+      category: '喜剧',
+      title: 'nav-smoke-seed',
+    }))
+  );
+});
+
+test.afterAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+});
 
 test('bottom nav shows three tabs (home / relax / progress) and they navigate', async ({ page }) => {
   const loginRes = await page.request.post('/api/dev/login');

@@ -1,5 +1,25 @@
 import { test, expect } from '@playwright/test';
-import { admin } from './helpers/session';
+import { admin as svcAdmin } from './helpers/session';
+
+const SEED_VIDS = ['8888888888000000001', '8888888888000000002'];
+
+test.beforeAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+  await a.from('video_pool').insert(
+    SEED_VIDS.map((v) => ({
+      video_id: v,
+      source: 'tiktok' as const,
+      category: '喜剧',
+      title: 'budget-feed-seed',
+    }))
+  );
+});
+
+test.afterAll(async () => {
+  const a = svcAdmin();
+  await a.from('video_pool').delete().in('video_id', SEED_VIDS);
+});
 
 test('budget → feed happy path: pick preset, start, land on feed, done now', async ({
   page,
@@ -28,7 +48,7 @@ test('feed: session cleanup writes ended_at on exit', async ({ page }) => {
   const loginRes = await page.request.post('/api/dev/login');
   expect(loginRes.ok()).toBeTruthy();
   const { email } = await loginRes.json();
-  const a = admin();
+  const a = svcAdmin();
   const { data: users } = await a.auth.admin.listUsers();
   const userId = users.users.find((u) => u.email === email)!.id;
 
