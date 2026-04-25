@@ -1,13 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TopicRail } from '@/components/home/TopicRail';
-
-function fmtBank(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s ? `${m}m ${s.toString().padStart(2, '0')}s` : `${m}m`;
-}
+import { fmtBank } from '@/lib/format';
 
 export default async function HomePage() {
   const supabase = createClient();
