@@ -182,6 +182,26 @@ async function collectVideoIds(
   };
 }
 
+async function findPlaylistUrls(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const anchors = Array.from(
+      document.querySelectorAll('a[href*="/playlist/"]')
+    );
+    const urls = new Set<string>();
+    for (const a of anchors) {
+      const href = (a as HTMLAnchorElement).href;
+      // Drop fragment / cache-busting params.
+      try {
+        const u = new URL(href);
+        urls.add(`${u.origin}${u.pathname}`);
+      } catch {
+        urls.add(href);
+      }
+    }
+    return [...urls];
+  });
+}
+
 async function verifyEmbed(c: Candidate): Promise<Verified | null> {
   const url = buildVideoUrl({ videoId: c.id, author: c.author });
   try {
@@ -238,45 +258,69 @@ async function main(): Promise<void> {
     await page.waitForTimeout(1500);
     await dismissModals(page);
 
-    // TikTok profile pages refuse to render the video grid for
-    // logged-out / bot-suspected sessions ("出错了, 请稍后重试"). If
-    // we see no tiles, give the user a chance to log in interactively.
+    // TikTok refuses to render the main video grid for logged-out /
+    // bot-suspected sessions ("出错了, 请稍后重试"). But playlist pages
+    // on the same profile DO render — so before bothering the user
+    // with an interactive login, try playlists as a fallback.
     let tileCount = await hasVideoTiles(page);
-    const loggedIn = await isLoggedIn(page);
+    const candidatesMap = new Map<string, string>();
+
     if (tileCount === 0) {
-      console.log('');
-      console.log('  ⚠ no video tiles found on the profile page.');
-      if (!loggedIn) {
-        console.log('  Looks like you are NOT logged in to TikTok.');
-        console.log(
-          '  Switch to the open Chrome window, log in (account / QR / Google etc.),'
+      console.log(
+        '  main grid empty — trying playlist fallback (no login needed)'
+      );
+      const playlists = await findPlaylistUrls(page);
+      console.log(`  found ${playlists.length} playlist(s) on profile`);
+      for (const plUrl of playlists) {
+        if (candidatesMap.size >= count * 1.5) break;
+        console.log(`    visit ${plUrl}`);
+        await page.goto(plUrl, { waitUntil: 'domcontentloaded' });
+        await page
+          .waitForSelector('a[href*="/video/"]', { timeout: 8000 })
+          .catch(() => null);
+        await page.waitForTimeout(1500);
+        const { candidates: plCands } = await collectVideoIds(
+          page,
+          handle,
+          count - candidatesMap.size
         );
-        console.log('  then come back here.');
-      } else {
+        for (const c of plCands) candidatesMap.set(c.id, c.author);
         console.log(
-          '  You appear to be logged in but the grid did not render — captcha?'
-        );
-        console.log(
-          '  Switch to the Chrome window, solve any challenge / refresh, then come back.'
+          `      ${plCands.length} new from this playlist (total: ${candidatesMap.size})`
         );
       }
-      await waitForEnter('  >>> press ENTER when the video grid is visible: ');
-      // Give it a moment to settle, then re-check.
-      await page.waitForTimeout(1000);
-      tileCount = await hasVideoTiles(page);
-      if (tileCount === 0) {
-        console.warn(
-          '  still no tiles after manual step — re-navigating once more.'
-        );
-        await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(2500);
-        tileCount = await hasVideoTiles(page);
-      }
-      console.log(`  now seeing ${tileCount} video anchor(s); resuming scroll.`);
     }
 
-    const { candidates, snapshots } = await collectVideoIds(page, handle, count);
-    console.log(`  collected ${candidates.length} candidate IDs`);
+    // If we still have nothing, fall back to interactive login on the
+    // profile page (some accounts don't expose playlists at all).
+    if (candidatesMap.size === 0) {
+      const loggedIn = await isLoggedIn(page);
+      console.log('');
+      console.log('  ⚠ no videos found via grid or playlists.');
+      if (!loggedIn) {
+        console.log('  You are NOT logged in. Log in via the open Chrome');
+        console.log(
+          '  (use phone QR / TikTok email — Google login is blocked by Google).'
+        );
+      } else {
+        console.log(
+          '  Logged in but still empty — captcha? refresh in Chrome and retry.'
+        );
+      }
+      await waitForEnter('  >>> press ENTER when ready to retry: ');
+      await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(2500);
+      const { candidates: retry } = await collectVideoIds(page, handle, count);
+      for (const c of retry) candidatesMap.set(c.id, c.author);
+      console.log(`  after retry: ${candidatesMap.size} candidate(s)`);
+    }
+
+    const candidates: Candidate[] = [...candidatesMap.entries()].map(
+      ([id, author]) => ({ id, author })
+    );
+    console.log(`  collected ${candidates.length} candidate IDs total`);
+    // unused snapshots from the original direct-grid path
+    const snapshots: ScrollSnapshot[] = [];
 
     if (candidates.length === 0) {
       // Diagnostic dump so we can tell whether the page didn't load,
