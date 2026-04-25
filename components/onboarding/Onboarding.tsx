@@ -41,11 +41,15 @@ export function Onboarding({ topics, initialLearnMinutes, initialTopicIds, onFin
     try {
       await onFinish({ rate: 5 / learnMin, topicIds: picked });
     } catch (e) {
+      // Server actions use a thrown error (digest "NEXT_REDIRECT...") to
+      // navigate. Re-throw so Next.js can handle it.
+      const err = e as Error & { digest?: string };
+      if (err?.digest?.startsWith('NEXT_REDIRECT')) throw e;
       setSubmitting(false);
       // Surface the failure so the user can retry. A toast system would be
       // nicer; alert() is fine for v1 because this only fires on auth/RLS
       // failures or network errors that the user must act on.
-      alert((e as Error).message ?? 'submit_failed');
+      alert(err.message ?? 'submit_failed');
     }
   };
 
