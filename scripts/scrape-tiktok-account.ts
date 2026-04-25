@@ -189,6 +189,11 @@ async function collectVideoIds(
  * `<a href>` for tiles, (b) DOM-based selectors break every time TikTok
  * tweaks its components, (c) the JSON is the same data the page
  * renders from.
+ *
+ * Implementation note: written as an iterative stack walk (no inner
+ * arrow-function helpers) because tsx/esbuild injects a `__name()`
+ * helper around named arrow functions, which then errors out as
+ * "ReferenceError: __name is not defined" inside page.evaluate.
  */
 async function extractVideosFromJson(
   page: Page,
@@ -206,27 +211,26 @@ async function extractVideosFromJson(
       return [];
     }
     const seen = new Map<string, string>();
-    // Walk every object looking for video-shaped records: an `id`
-    // string of 15-20 digits, optionally with `author.uniqueId`.
-    const visit = (obj: unknown): void => {
-      if (!obj || typeof obj !== 'object') return;
-      if (Array.isArray(obj)) {
-        for (const v of obj) visit(v);
-        return;
+    const stack: unknown[] = [data];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (!cur || typeof cur !== 'object') continue;
+      if (Array.isArray(cur)) {
+        for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+        continue;
       }
-      const o = obj as Record<string, unknown>;
+      const o = cur as Record<string, unknown>;
       if (typeof o.id === 'string' && /^\d{15,20}$/.test(o.id)) {
+        let author = h;
         const a = o.author as Record<string, unknown> | undefined;
-        const author =
-          (a && typeof a.uniqueId === 'string' && a.uniqueId) ||
-          (typeof o.authorName === 'string' && o.authorName) ||
-          h;
+        if (a && typeof a.uniqueId === 'string') author = a.uniqueId;
+        else if (typeof o.authorName === 'string') author = o.authorName;
         if (!seen.has(o.id)) seen.set(o.id, author);
       }
-      for (const key of Object.keys(o)) visit(o[key]);
-    };
-    visit(data);
-    return [...seen.entries()].map(([id, author]) => ({ id, author }));
+      const keys = Object.keys(o);
+      for (let i = 0; i < keys.length; i++) stack.push(o[keys[i]]);
+    }
+    return Array.from(seen.entries()).map(([id, author]) => ({ id, author }));
   }, handle);
 }
 
