@@ -33,7 +33,12 @@ export async function middleware(req: NextRequest) {
     path === '/admin' ||
     path.startsWith('/admin/') ||
     path === '/api/admin' ||
-    path.startsWith('/api/admin/');
+    path.startsWith('/api/admin/') ||
+    // Static assets used by the public landing page (/) — must stay open
+    // so unauthenticated visitors can load the chapter videos and PNGs.
+    path.startsWith('/videos/') ||
+    path.startsWith('/scenes/') ||
+    path.startsWith('/characters/');
 
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url));
