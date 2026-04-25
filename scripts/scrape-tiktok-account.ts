@@ -182,6 +182,54 @@ async function collectVideoIds(
   };
 }
 
+/**
+ * Extract video candidates by walking the JSON blob TikTok embeds in
+ * `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">`. This is way more
+ * reliable than DOM scraping because (a) playlist pages don't use
+ * `<a href>` for tiles, (b) DOM-based selectors break every time TikTok
+ * tweaks its components, (c) the JSON is the same data the page
+ * renders from.
+ */
+async function extractVideosFromJson(
+  page: Page,
+  handle: string
+): Promise<Candidate[]> {
+  return page.evaluate((h) => {
+    const script = document.querySelector(
+      'script#__UNIVERSAL_DATA_FOR_REHYDRATION__'
+    );
+    if (!script || !script.textContent) return [];
+    let data: unknown;
+    try {
+      data = JSON.parse(script.textContent);
+    } catch {
+      return [];
+    }
+    const seen = new Map<string, string>();
+    // Walk every object looking for video-shaped records: an `id`
+    // string of 15-20 digits, optionally with `author.uniqueId`.
+    const visit = (obj: unknown): void => {
+      if (!obj || typeof obj !== 'object') return;
+      if (Array.isArray(obj)) {
+        for (const v of obj) visit(v);
+        return;
+      }
+      const o = obj as Record<string, unknown>;
+      if (typeof o.id === 'string' && /^\d{15,20}$/.test(o.id)) {
+        const a = o.author as Record<string, unknown> | undefined;
+        const author =
+          (a && typeof a.uniqueId === 'string' && a.uniqueId) ||
+          (typeof o.authorName === 'string' && o.authorName) ||
+          h;
+        if (!seen.has(o.id)) seen.set(o.id, author);
+      }
+      for (const key of Object.keys(o)) visit(o[key]);
+    };
+    visit(data);
+    return [...seen.entries()].map(([id, author]) => ({ id, author }));
+  }, handle);
+}
+
 async function findPlaylistUrls(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const anchors = Array.from(
@@ -259,13 +307,20 @@ async function main(): Promise<void> {
     await dismissModals(page);
 
     // TikTok refuses to render the main video grid for logged-out /
-    // bot-suspected sessions ("出错了, 请稍后重试"). But playlist pages
-    // on the same profile DO render — so before bothering the user
-    // with an interactive login, try playlists as a fallback.
+    // bot-suspected sessions ("出错了, 请稍后重试"). But the embedded
+    // JSON often still has the video list, and playlist pages render
+    // separately — try both before bothering the user to log in.
     let tileCount = await hasVideoTiles(page);
     const candidatesMap = new Map<string, string>();
 
-    if (tileCount === 0) {
+    // Profile-page JSON: cheaper than visiting playlists.
+    const profileJson = await extractVideosFromJson(page, handle);
+    for (const c of profileJson) candidatesMap.set(c.id, c.author);
+    if (profileJson.length > 0) {
+      console.log(`  extracted ${profileJson.length} video(s) from profile JSON`);
+    }
+
+    if (tileCount === 0 && candidatesMap.size === 0) {
       console.log(
         '  main grid empty — trying playlist fallback (no login needed)'
       );
@@ -275,18 +330,36 @@ async function main(): Promise<void> {
         if (candidatesMap.size >= count * 1.5) break;
         console.log(`    visit ${plUrl}`);
         await page.goto(plUrl, { waitUntil: 'domcontentloaded' });
-        await page
-          .waitForSelector('a[href*="/video/"]', { timeout: 8000 })
-          .catch(() => null);
-        await page.waitForTimeout(1500);
-        const { candidates: plCands } = await collectVideoIds(
-          page,
-          handle,
-          count - candidatesMap.size
-        );
-        for (const c of plCands) candidatesMap.set(c.id, c.author);
+        await page.waitForTimeout(2500);
+
+        // Try JSON extraction first (most reliable). Then anchors. If
+        // both empty, prompt the user to solve any captcha in Chrome.
+        let jsonCands = await extractVideosFromJson(page, handle);
+        let anchorRes = await collectVideoIds(page, handle, count);
+        let combined = new Map<string, string>();
+        for (const c of jsonCands) combined.set(c.id, c.author);
+        for (const c of anchorRes.candidates) combined.set(c.id, c.author);
+
+        if (combined.size === 0) {
+          console.log(
+            '      empty — likely captcha. Solve it in the open Chrome,'
+          );
+          console.log('      wait for the playlist videos to render, then');
+          await waitForEnter('      >>> press ENTER to retry: ');
+          await page.waitForTimeout(1000);
+          jsonCands = await extractVideosFromJson(page, handle);
+          anchorRes = await collectVideoIds(page, handle, count);
+          combined = new Map<string, string>();
+          for (const c of jsonCands) combined.set(c.id, c.author);
+          for (const c of anchorRes.candidates) combined.set(c.id, c.author);
+        }
+
+        const before = candidatesMap.size;
+        for (const [id, author] of combined) candidatesMap.set(id, author);
         console.log(
-          `      ${plCands.length} new from this playlist (total: ${candidatesMap.size})`
+          `      ${candidatesMap.size - before} new from this playlist ` +
+            `(json=${jsonCands.length}, anchors=${anchorRes.candidates.length}, ` +
+            `total=${candidatesMap.size})`
         );
       }
     }
