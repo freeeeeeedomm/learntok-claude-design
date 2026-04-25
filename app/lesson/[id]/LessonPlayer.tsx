@@ -220,7 +220,7 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
   if (state.phase === 'failed') {
     return (
       <main className="app pad center col gap-16" style={{ minHeight: '100vh' }}>
-        <div className="display" style={{ fontSize: 24 }}>couldn't start this lesson.</div>
+        <div className="display" style={{ fontSize: 24 }}>couldn&apos;t start this lesson.</div>
         <div className="col gap-8" style={{ width: '100%', maxWidth: 320 }}>
           <button className="btn btn-primary" onClick={retryStart}>retry</button>
           <a className="btn btn-ghost" href="/home">back to home</a>
@@ -312,7 +312,7 @@ export function LessonPlayer({ lesson, initialBalance, alreadyCompleted }: Lesso
             <div style={{ width: 40, height: 4, background: 'var(--line)', borderRadius: 2, alignSelf: 'center' }} />
             <div className="display" style={{ fontSize: 24 }}>still studying?</div>
             <div className="body">
-              video's been paused 5 min. we paused the earn clock too — no cheating by accident 😊
+              video&apos;s been paused 5 min. we paused the earn clock too — no cheating by accident 😊
             </div>
             <div className="col gap-8">
               <button className="btn btn-primary" onClick={acknowledge}>yep, resume</button>
