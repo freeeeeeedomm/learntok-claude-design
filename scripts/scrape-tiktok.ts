@@ -14,6 +14,7 @@ import { chromium, type Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { mkdir, writeFile } from 'fs/promises';
 import { dirname } from 'path';
+import { buildVideoUrl } from '../lib/tiktok-url';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -91,7 +92,7 @@ async function collectIds(page: Page): Promise<Candidate[]> {
 }
 
 async function verifyEmbed(c: Candidate): Promise<Verified | null> {
-  const url = `https://www.tiktok.com/@${c.author}/video/${c.id}`;
+  const url = buildVideoUrl({ videoId: c.id, author: c.author });
   try {
     const res = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
     if (!res.ok) return null;
