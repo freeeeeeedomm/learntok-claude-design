@@ -5,29 +5,12 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { VideoEmbed } from '@/components/feed/VideoEmbed';
 
-// 18 hardcoded public TikTok IDs (from learntok-v2 seed_presets). Categories
-// span comedy / music / pets / magic / art / cooking. The /add page can
-// eventually let users curate their own feeds; this is v1 seed content.
-const FEED_VIDS: Array<{ id: string; source: 'tiktok' | 'youtube'; caption: string }> = [
-  { id: '6862153058223197445', source: 'tiktok', caption: 'Bella Poarch — M to the B' },
-  { id: '6950627842518568197', source: 'tiktok', caption: 'Khaby Lame — peel a banana' },
-  { id: '6979606181463526661', source: 'tiktok', caption: 'Khaby Lame — wing mirror hack' },
-  { id: '6932635718615338246', source: 'tiktok', caption: 'Sugar Crash parody' },
-  { id: '6973813778597055749', source: 'tiktok', caption: 'pick-up line comedy' },
-  { id: '7332342275151760642', source: 'tiktok', caption: 'Leah Halton — inverted lip sync' },
-  { id: '7071079551756979483', source: 'tiktok', caption: 'MONA — singing performance' },
-  { id: '7058186727248235782', source: 'tiktok', caption: 'Say It Right' },
-  { id: '7028775404173413678', source: 'tiktok', caption: 'dog interaction' },
-  { id: '6839416095586159878', source: 'tiktok', caption: 'cat pawing' },
-  { id: '6975140587196517638', source: 'tiktok', caption: 'chipmunks eating nuts' },
-  { id: '6768504823336815877', source: 'tiktok', caption: 'Zach King — magic broomstick' },
-  { id: '6749520869598481669', source: 'tiktok', caption: 'Zach King — glass + cake' },
-  { id: '6766278000783658245', source: 'tiktok', caption: 'Zach King — hiding spots' },
-  { id: '6911406868699073798', source: 'tiktok', caption: 'mouth drawing art' },
-  { id: '7065370017944063278', source: 'tiktok', caption: 'UP-themed 3D animation' },
-  { id: '7332187682480590112', source: 'tiktok', caption: 'chocolate covered strawberries' },
-  { id: '6894081763379924229', source: 'tiktok', caption: 'Billie Eilish — TimeWarp' },
-];
+type FeedVid = {
+  video_id: string;
+  source: 'tiktok' | 'youtube';
+  title: string | null;
+  category: string | null;
+};
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -41,9 +24,11 @@ function fmtMMSS(seconds: number): string {
 export function FeedPlayer({
   sessionId,
   budgetSeconds,
+  vids,
 }: {
   sessionId: string;
   budgetSeconds: number;
+  vids: FeedVid[];
 }) {
   const [remain, setRemain] = useState<number>(budgetSeconds);
   const [vidIdx, setVidIdx] = useState(0);
@@ -208,15 +193,54 @@ export function FeedPlayer({
     if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
   }, []);
 
-  const vid = FEED_VIDS[vidIdx % FEED_VIDS.length];
+  const vid = vids.length > 0 ? vids[vidIdx % vids.length] : null;
   const pct = Math.max(0, Math.min(100, (remain / budgetSeconds) * 100));
+
+  if (!vid) {
+    return (
+      <div className="feed" data-testid="feed-root">
+        <div
+          className="col aic jc"
+          data-testid="feed-empty"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            padding: 24,
+            textAlign: 'center',
+            color: '#fff',
+          }}
+        >
+          <div
+            className="display"
+            style={{ fontSize: 24, fontFamily: 'var(--serif)' }}
+          >
+            no videos yet
+          </div>
+          <div className="body mt-8" style={{ color: '#d6d3cf' }}>
+            ask the admin to run <code>npm run scrape:tiktok</code>.
+          </div>
+          <div className="angel-exit-bar mt-24">
+            <button
+              type="button"
+              className="angel-exit-btn"
+              onClick={doneNow}
+              disabled={submitting}
+              data-testid="angel-exit"
+            >
+              <span className="angel-exit-label">回去学习</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="feed" data-testid="feed-root">
       <div
         className={`feed-video ${slideDirection !== 'none' ? `feed-slide-${slideDirection}` : ''}`}
       >
-        <VideoEmbed source={vid.source} videoId={vid.id} fillHeight />
+        <VideoEmbed source={vid.source} videoId={vid.video_id} fillHeight />
       </div>
       {!overlayHidden && !endedBySystem && (
         <div
@@ -238,7 +262,7 @@ export function FeedPlayer({
 
       <div className="feed-overlay-info">
         <div style={{ fontSize: 13, marginTop: 4, opacity: 0.9 }}>
-          {vid.caption}
+          {vid.title ?? ''}
         </div>
       </div>
 

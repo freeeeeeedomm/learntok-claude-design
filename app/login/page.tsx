@@ -1,45 +1,29 @@
 'use client';
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { AuthShell } from '@/components/auth/AuthShell';
+import {
+  AuthButton,
+  MailIcon,
+  GoogleIcon,
+} from '@/components/auth/AuthButton';
 
-type Stage = 'email' | 'code';
+type Stage = 'entry' | 'email' | 'password' | 'code' | 'forgot';
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [stage, setStage] = useState<Stage>('email');
+  const [stage, setStage] = useState<Stage>('entry');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const sendCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    // Clear any lingering session so verifyOtp later can create a fresh one.
-    await supabase.auth.signOut();
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    setBusy(false);
-    if (error) { setError(error.message); return; }
-    setStage('code');
-  };
-
-  const verifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    // Supabase stores the signInWithOtp token as 'email' for new users
-    // and 'recovery' for already-confirmed returning users. Try both.
-    const trimmed = code.trim();
-    let res = await supabase.auth.verifyOtp({ email, token: trimmed, type: 'email' });
-    if (res.error) {
-      res = await supabase.auth.verifyOtp({ email, token: trimmed, type: 'recovery' });
-    }
-    setBusy(false);
-    if (res.error) { setError(res.error.message); return; }
-    router.push('/home');
-    router.refresh();
-  };
+  const devPanelEnabled = process.env.NEXT_PUBLIC_DEV_PANEL === 'true';
 
   const google = async () => {
     await supabase.auth.signInWithOAuth({
@@ -48,106 +32,289 @@ export default function LoginPage() {
     });
   };
 
-  const devLogin = async () => {
-    if (busy) return;
-    setBusy(true); setError(null);
+  const submitEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setStage('password');
+  };
+
+  const submitPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
     await supabase.auth.signOut();
-    const res = await fetch('/api/dev/login', { method: 'POST' });
-    if (!res.ok) {
-      const { error: msg } = await res.json().catch(() => ({ error: 'dev_login_failed' }));
-      setError(msg ?? 'dev_login_failed');
-      setBusy(false);
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
       return;
     }
-    const { email: devEmail, password } = await res.json();
-    const { error } = await supabase.auth.signInWithPassword({ email: devEmail, password });
-    setBusy(false);
-    if (error) { setError(error.message); return; }
-    // /api/dev/login sets onboarded=true, so /home renders directly (no /onboarding detour).
     router.push('/home');
     router.refresh();
   };
 
-  const devPanelEnabled = process.env.NEXT_PUBLIC_DEV_PANEL === 'true';
+  const useCodeInstead = async () => {
+    setBusy(true);
+    setError(null);
+    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setStage('code');
+  };
+
+  const submitCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code.trim(),
+      type: 'email',
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    router.push('/home');
+    router.refresh();
+  };
+
+  const forgotPassword = async () => {
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${location.origin}/auth/reset`,
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setStage('forgot');
+  };
+
+  const devLogin = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    await supabase.auth.signOut();
+    const res = await fetch('/api/dev/login', { method: 'POST' });
+    if (!res.ok) {
+      const { error: msg } = await res
+        .json()
+        .catch(() => ({ error: 'dev_login_failed' }));
+      setError(msg ?? 'dev_login_failed');
+      setBusy(false);
+      return;
+    }
+    const { email: devEmail, password: devPassword } = await res.json();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: devEmail,
+      password: devPassword,
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    router.push('/home');
+    router.refresh();
+  };
+
+  const onBack =
+    stage === 'entry'
+      ? undefined
+      : stage === 'email'
+      ? () => {
+          setStage('entry');
+          setError(null);
+        }
+      : stage === 'password'
+      ? () => {
+          setStage('email');
+          setError(null);
+          setPassword('');
+        }
+      : stage === 'code'
+      ? () => {
+          setStage('password');
+          setError(null);
+          setCode('');
+        }
+      : () => {
+          setStage('password');
+          setError(null);
+        };
 
   return (
-    <main className="min-h-screen grid place-items-center p-6">
-      <div className="w-full max-w-sm space-y-5">
-        <h1 className="font-serif text-3xl">sign in</h1>
-
-        {devPanelEnabled && (
-          <div className="space-y-2">
-            <button
-              onClick={devLogin}
-              disabled={busy}
-              data-testid="dev-login"
-              className="w-full bg-accent text-white py-4 rounded-xl font-semibold disabled:opacity-50 text-base"
+    <AuthShell onBack={onBack}>
+      {stage === 'entry' && (
+        <>
+          <h1 className="font-serif text-4xl leading-tight text-center mb-10">
+            Welcome back
+          </h1>
+          {devPanelEnabled && (
+            <>
+              <button
+                onClick={devLogin}
+                disabled={busy}
+                data-testid="dev-login"
+                className="w-full bg-accent text-white py-4 rounded-full font-semibold disabled:opacity-50 text-base mb-3"
+              >
+                {busy ? 'logging in…' : '🛠  dev login — tap to test'}
+              </button>
+              <div className="flex items-center gap-3 text-xs text-ink-mute mb-3">
+                <div className="h-px bg-line flex-1" />
+                <span>or sign in normally</span>
+                <div className="h-px bg-line flex-1" />
+              </div>
+            </>
+          )}
+          <div className="space-y-3">
+            <AuthButton
+              variant="primary"
+              icon={<MailIcon />}
+              onClick={() => setStage('email')}
             >
-              {busy ? 'logging in…' : '🛠  dev login — tap to test'}
-            </button>
-            <div className="text-xs text-ink-mute text-center">
-              no email needed · preset content loaded · 5 min jar
-            </div>
+              Continue with Email
+            </AuthButton>
+            <AuthButton
+              variant="google"
+              icon={<GoogleIcon />}
+              onClick={google}
+            >
+              Continue with Google
+            </AuthButton>
           </div>
-        )}
+          <p className="text-ink-mute text-sm text-center mt-8">
+            New here?{' '}
+            <Link href="/signup" className="text-accent font-semibold">
+              Sign up
+            </Link>
+          </p>
+        </>
+      )}
 
-        {devPanelEnabled && (
-          <div className="flex items-center gap-3 text-xs text-ink-mute">
-            <div className="h-px bg-line flex-1" />
-            <span>or sign in normally</span>
-            <div className="h-px bg-line flex-1" />
-          </div>
-        )}
+      {stage === 'email' && (
+        <form onSubmit={submitEmail} className="space-y-4">
+          <h1 className="font-serif text-3xl text-center mb-8">
+            What&rsquo;s your email?
+          </h1>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoFocus
+            className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink"
+          />
+          <AuthButton variant="primary" type="submit">
+            Continue
+          </AuthButton>
+        </form>
+      )}
 
-        {stage === 'email' && (
-          <form onSubmit={sendCode} className="space-y-3">
-            <input
-              type="email" required value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink"
-            />
-            <button disabled={busy} className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-50">
-              {busy ? 'sending…' : 'send code'}
-            </button>
-          </form>
-        )}
-
-        {stage === 'code' && (
-          <form onSubmit={verifyCode} className="space-y-3">
-            <div className="text-ink-soft text-sm">
-              we sent a code to <b className="text-ink">{email}</b>
-            </div>
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
-              value={code}
-              // Supabase OTP length is 6–10 depending on project setting; accept up to 10.
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="••••••"
-              className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink text-center font-mono tracking-[0.4em] text-xl"
-            />
-            <button disabled={busy || code.length < 6} className="w-full bg-accent text-white py-3 rounded-xl font-semibold disabled:opacity-50">
-              {busy ? 'verifying…' : 'verify'}
+      {stage === 'password' && (
+        <form onSubmit={submitPassword} className="space-y-4">
+          <h1 className="font-serif text-3xl text-center mb-2">
+            Enter your password
+          </h1>
+          <p className="text-ink-soft text-sm text-center mb-6">{email}</p>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            autoFocus
+            className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink"
+          />
+          <AuthButton variant="primary" type="submit" disabled={busy}>
+            {busy ? 'Logging in…' : 'Log in'}
+          </AuthButton>
+          {error && <p className="text-sm text-bad text-center">{error}</p>}
+          <div className="flex flex-col gap-2 pt-2">
+            <button
+              type="button"
+              onClick={useCodeInstead}
+              disabled={busy}
+              className="text-sm text-accent disabled:opacity-50"
+            >
+              Use a code instead
             </button>
             <button
               type="button"
-              onClick={() => { setStage('email'); setCode(''); setError(null); }}
-              className="w-full text-sm text-ink-mute"
+              onClick={forgotPassword}
+              disabled={busy || !email}
+              className="text-sm text-ink-mute disabled:opacity-50"
             >
-              use a different email
+              Forgot password?
             </button>
-          </form>
-        )}
+          </div>
+        </form>
+      )}
 
-        {error && <div className="text-sm text-bad">{error}</div>}
+      {stage === 'code' && (
+        <form onSubmit={submitCode} className="space-y-4">
+          <h1 className="font-serif text-3xl text-center mb-4">
+            Check your email
+          </h1>
+          <p className="text-ink-soft text-sm text-center mb-6">
+            We sent a code to <b className="text-ink">{email}</b>
+          </p>
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            value={code}
+            onChange={(e) =>
+              setCode(e.target.value.replace(/\D/g, '').slice(0, 10))
+            }
+            placeholder="••••••"
+            className="w-full bg-bg-2 border border-line rounded-xl px-4 py-3 text-ink text-center font-mono tracking-[0.4em] text-xl"
+          />
+          <AuthButton
+            variant="primary"
+            type="submit"
+            disabled={busy || code.length < 6}
+          >
+            {busy ? 'Verifying…' : 'Verify'}
+          </AuthButton>
+          <button
+            type="button"
+            onClick={useCodeInstead}
+            disabled={busy}
+            className="w-full text-sm text-ink-mute disabled:opacity-50"
+          >
+            Resend code
+          </button>
+          {error && <p className="text-sm text-bad text-center">{error}</p>}
+        </form>
+      )}
 
-        <div className="text-center text-ink-mute text-sm">or</div>
-        <button onClick={google} className="w-full bg-bg-2 border border-line py-3 rounded-xl">
-          continue with Google
-        </button>
-      </div>
-    </main>
+      {stage === 'forgot' && (
+        <div className="text-center space-y-6">
+          <h1 className="font-serif text-3xl">Check your inbox</h1>
+          <p className="text-ink-soft text-sm">
+            We sent a password reset link to <b className="text-ink">{email}</b>.
+          </p>
+          <AuthButton variant="outline" onClick={() => setStage('password')}>
+            Back to log in
+          </AuthButton>
+        </div>
+      )}
+    </AuthShell>
   );
 }

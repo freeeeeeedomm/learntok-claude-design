@@ -40,7 +40,15 @@ Clients call `/api/sessions/heartbeat` every ~15s with `{ sessionId, playing }`.
 
 ### Auth flow
 
-`middleware.ts` gates every route: unauthenticated users are redirected to `/login` unless the path is `/`, `/login`, `/auth/*`, `/_next/*`, or `/api/public/*`. Authenticated users on auth routes get bounced to `/home`. Magic-link and Google OAuth both land at `/auth/callback`, which exchanges the code for a session.
+`middleware.ts` gates every route: unauthenticated users are redirected to `/login` unless the path is in the `isPublic` allowlist. Currently public:
+
+- `/` (the landing page) and its static assets: `/videos/*`, `/scenes/*`, `/characters/*`
+- `/_next/*`, `/api/public/*`, `/api/dev/*`
+- `/admin/*` and `/api/admin/*` — exempt so the cookie backdoor works without a Supabase session; every page/route under these paths **must** call `requireAdmin()` / `checkAdminForApi()` itself.
+
+Authenticated users on auth routes (`/login`, `/auth/*`) get bounced to `/home`. Magic-link and Google OAuth both land at `/auth/callback`, which exchanges the code for a session.
+
+⚠️ **When editing `isPublic`, append — never rewrite the list.** Each entry gates an unauthenticated flow that won't fail loudly: cached HTTP responses on existing devices mask the regression, so it only surfaces in incognito or for first-time visitors. The phase5-admin-pool merge dropped the landing page's static-asset entries this way and the bug shipped to production.
 
 On first sign-in, the `on_auth_user_created` trigger creates a `profiles` row AND inserts a 300s `welcome_gift` ledger entry. Don't duplicate this in application code.
 
