@@ -2,12 +2,18 @@
 
 import { useMemo, useState } from 'react';
 
+// Hardcoded since this is a single-user admin tool. If the repo moves,
+// edit this constant.
+const PROJECT_DIR = 'C:\\Users\\admin\\Desktop\\ClaudeProjects\\learntok-claude-design';
+
 /**
- * Builds a `npm run scrape:tiktok:account -- @handle category count`
- * command string for the user to copy and run locally. The actual scrape
- * runs in their terminal (Playwright + persistent Chrome profile) — we
- * intentionally don't run it from the server because TikTok blocks
- * Vercel-region IPs.
+ * Builds a two-line command (cd + npm run) for the user to copy and run
+ * locally. The actual scrape runs in their terminal (Playwright +
+ * persistent Chrome profile) — we intentionally don't run it from the
+ * server because TikTok blocks Vercel-region IPs.
+ *
+ * Quotes around `@handle` are required: PowerShell parses bare `@x` as
+ * a variable reference and errors out before npm even sees the arg.
  */
 export function ScrapeAccountForm({ categories }: { categories: string[] }) {
   const [open, setOpen] = useState(false);
@@ -27,7 +33,11 @@ export function ScrapeAccountForm({ categories }: { categories: string[] }) {
 
   const command = useMemo(() => {
     if (!handle || !category || !count) return '';
-    return `npm run scrape:tiktok:account -- @${handle} ${category} ${count}`;
+    // Two lines: cd into project, then run. Handle is double-quoted so
+    // PowerShell doesn't treat the leading @ as a variable reference.
+    const cdLine = `cd "${PROJECT_DIR}"`;
+    const runLine = `npm run scrape:tiktok:account -- "@${handle}" ${category} ${count}`;
+    return `${cdLine}\n${runLine}`;
   }, [handle, category, count]);
 
   const copy = async () => {
@@ -121,7 +131,7 @@ export function ScrapeAccountForm({ categories }: { categories: string[] }) {
           color: 'var(--ink-mute)',
         }}
       >
-        本地终端运行下面这条命令(scraper 用持久化 Chrome,反爬绕得过):
+        本地终端粘贴下面两行(scraper 用持久化 Chrome,反爬绕得过):
       </div>
 
       <pre
