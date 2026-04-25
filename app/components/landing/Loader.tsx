@@ -1,121 +1,175 @@
 'use client';
 
 /**
- * Preloads all videos with real byte-level progress, reports aggregate
- * percentage, and resolves a Blob URL per video once fully downloaded.
- * Once every video has finished, calls onReady with the url map.
+ * Preloads videos by mounting hidden <video preload="auto"> elements and
+ * watching their `progress` / `loadeddata` events. We do NOT fetch + Blob
+ * the videos ourselves — that path is fragile (Vercel CDN edge cases,
+ * mobile Safari ReadableStream quirks, content-length missing) and was
+ * causing the loader to flash 100% with no playback in incognito.
  *
- * We fetch with ReadableStream so the progress bar reflects actual bytes,
- * not just "file N of M" — important for a perceived-fast loading screen
- * when the longest video dominates total size.
+ * Instead we let the browser do what it's good at, and use the resulting
+ * HTTP cache for the visible <video> in <Chapter>. The handoff payload is
+ * the same shape (`Record<src, url>`) but maps each src to itself.
+ *
+ * A 6s hard timeout guarantees we never block the user behind a stalled
+ * preload (mobile data-saver mode often throttles preload="auto").
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type Props = {
   sources: string[];
-  onReady: (blobUrls: Record<string, string>) => void;
+  onReady: (urls: Record<string, string>) => void;
 };
+
+const HARD_TIMEOUT_MS = 6000;
+const MIN_SHOW_MS = 500;
+const FADE_MS = 650;
 
 export default function Loader({ sources, onReady }: Props) {
   const [percent, setPercent] = useState(0);
   const [fadingOut, setFadingOut] = useState(false);
   const firedRef = useRef(false);
-
-  const list = useMemo(() => sources, [sources]);
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    const startedAt = Date.now();
 
-    // Byte totals for each source index.
-    const totals: number[] = new Array(list.length).fill(0);
-    const loaded: number[] = new Array(list.length).fill(0);
+    const ratios = new Array(sources.length).fill(0);
+    const ready = new Array(sources.length).fill(false);
+    const cleanups: Array<() => void> = [];
 
     const updatePercent = () => {
-      const totalBytes = totals.reduce((a, b) => a + b, 0);
-      const loadedBytes = loaded.reduce((a, b) => a + b, 0);
-      if (totalBytes === 0) {
-        // Fallback: we don't know the total yet. Use file-count progress.
-        const finishedCount = loaded.filter((n, i) => totals[i] === 0 ? false : n >= totals[i]).length;
-        setPercent(Math.round((finishedCount / list.length) * 100));
-        return;
-      }
-      const pct = Math.min(100, Math.round((loadedBytes / totalBytes) * 100));
-      setPercent(pct);
+      if (firedRef.current) return;
+      const avg = ratios.reduce((a, b) => a + b, 0) / sources.length;
+      const pct = Math.min(98, Math.round(avg * 100));
+      setPercent((cur) => (pct > cur ? pct : cur));
     };
 
-    async function fetchOne(url: string, idx: number): Promise<string | null> {
-      try {
-        const res = await fetch(url);
-        if (!res.ok || !res.body) return null;
-
-        const lenHeader = res.headers.get('content-length');
-        totals[idx] = lenHeader ? parseInt(lenHeader, 10) : 0;
-        updatePercent();
-
-        const reader = res.body.getReader();
-        const chunks: BlobPart[] = [];
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            chunks.push(value);
-            loaded[idx] += value.length;
-            // If we didn't have a content-length, keep totals growing so the
-            // bar at least moves.
-            if (totals[idx] === 0) totals[idx] = loaded[idx];
-            updatePercent();
-          }
-          if (cancelled) {
-            reader.cancel().catch(() => {});
-            return null;
-          }
-        }
-        const blob = new Blob(chunks, { type: res.headers.get('content-type') || 'video/mp4' });
-        return URL.createObjectURL(blob);
-      } catch {
-        return null;
-      }
-    }
-
-    (async () => {
-      const results = await Promise.all(list.map((u, i) => fetchOne(u, i)));
-      if (cancelled || firedRef.current) return;
-
-      const map: Record<string, string> = {};
-      results.forEach((blobUrl, i) => {
-        if (blobUrl) map[list[i]] = blobUrl;
-      });
-
-      // Snap to 100%, hold a beat, fade out, then hand off.
-      setPercent(100);
+    const finishUp = () => {
+      if (firedRef.current || cancelled) return;
       firedRef.current = true;
+      const map: Record<string, string> = {};
+      sources.forEach((u) => {
+        map[u] = u;
+      });
+      setPercent(100);
+      const elapsed = Date.now() - startedAt;
+      const wait = Math.max(0, MIN_SHOW_MS - elapsed);
       setTimeout(() => {
+        if (cancelled) return;
         setFadingOut(true);
         setTimeout(() => {
           if (!cancelled) onReady(map);
-        }, 650);
-      }, 300);
-    })();
+        }, FADE_MS);
+      }, wait);
+    };
+
+    const checkAllReady = () => {
+      if (ready.every(Boolean)) finishUp();
+    };
+
+    sources.forEach((_src, idx) => {
+      const v = videoRefs.current[idx];
+      if (!v) return;
+
+      const onProgress = () => {
+        try {
+          if (v.duration > 0 && v.buffered.length > 0) {
+            const end = v.buffered.end(v.buffered.length - 1);
+            ratios[idx] = Math.min(1, end / v.duration);
+            updatePercent();
+          }
+        } catch {
+          /* noop */
+        }
+      };
+      const markReady = () => {
+        ratios[idx] = 1;
+        ready[idx] = true;
+        updatePercent();
+        checkAllReady();
+      };
+
+      v.addEventListener('progress', onProgress);
+      v.addEventListener('loadeddata', markReady);
+      v.addEventListener('canplaythrough', markReady);
+      v.addEventListener('error', markReady); // don't hang on error
+      // Kick the load — preload="auto" attribute handles most cases, but
+      // some browsers need .load() after src is set.
+      try {
+        v.load();
+      } catch {
+        /* noop */
+      }
+
+      cleanups.push(() => {
+        v.removeEventListener('progress', onProgress);
+        v.removeEventListener('loadeddata', markReady);
+        v.removeEventListener('canplaythrough', markReady);
+        v.removeEventListener('error', markReady);
+      });
+    });
+
+    const timeout = setTimeout(() => {
+      if (!firedRef.current) finishUp();
+    }, HARD_TIMEOUT_MS);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
+      cleanups.forEach((c) => c());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className={`loader${fadingOut ? ' loader-fadeout' : ''}`} role="status" aria-live="polite">
-      <h1 className="loader-mark">
-        Learn<span className="dot">·</span>Tok
-      </h1>
-      <p className="loader-caption">Preparing the story&hellip;</p>
-      <div className="loader-bar" aria-hidden>
-        <div className="loader-bar-fill" style={{ width: `${percent}%` }} />
+    <>
+      {/* Off-screen preloaders. Must be in DOM for iOS Safari to honor preload. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          width: 1,
+          height: 1,
+          left: -9999,
+          top: -9999,
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}
+      >
+        {sources.map((src, i) => (
+          <video
+            key={src}
+            ref={(el) => {
+              videoRefs.current[i] = el;
+            }}
+            src={src}
+            preload="auto"
+            muted
+            playsInline
+          />
+        ))}
       </div>
-      <div className="loader-percent">{percent.toString().padStart(2, '0')}%</div>
-      <span className="sr-only">{`Loading ${percent} percent`}</span>
-    </div>
+
+      <div
+        className={`loader${fadingOut ? ' loader-fadeout' : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        <h1 className="loader-mark">
+          Learn<span className="dot">·</span>Tok
+        </h1>
+        <p className="loader-caption">Preparing the story&hellip;</p>
+        <div className="loader-bar" aria-hidden>
+          <div className="loader-bar-fill" style={{ width: `${percent}%` }} />
+        </div>
+        <div className="loader-percent">
+          {percent.toString().padStart(2, '0')}%
+        </div>
+        <span className="sr-only">{`Loading ${percent} percent`}</span>
+      </div>
+    </>
   );
 }
