@@ -21,5 +21,17 @@ export async function GET(req: Request) {
     .single();
 
   const dest = profile?.onboarded ? '/home' : '/onboarding';
-  return NextResponse.redirect(new URL(dest, req.url));
+  const res = NextResponse.redirect(new URL(dest, req.url));
+  // Mark this browser as a returning visitor. The landing page at `/` uses
+  // this cookie to skip itself for anyone who's completed at least one
+  // login — new visitors still see the story, returning visitors go
+  // straight to /login (or /home if their session is still alive). Set
+  // here regardless of onboarding status: both /home and /onboarding mean
+  // they've authenticated at least once.
+  res.cookies.set('lt_seen', '1', {
+    maxAge: 60 * 60 * 24 * 365, // 1 year
+    sameSite: 'lax',
+    path: '/',
+  });
+  return res;
 }

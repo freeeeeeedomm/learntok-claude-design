@@ -48,6 +48,14 @@ Clients call `/api/sessions/heartbeat` every ~15s with `{ sessionId, playing }`.
 
 Authenticated users on auth routes (`/login`, `/auth/*`) get bounced to `/home`. Magic-link and Google OAuth both land at `/auth/callback`, which exchanges the code for a session.
 
+**Root-path (`/`) branching.** The landing page is for first-time visitors only. Middleware decides what to render at `/` using two signals:
+
+- Supabase session present → `/home` (skip the marketing page)
+- `lt_seen=1` cookie present (set in `/auth/callback` after any successful sign-in) → `/login`
+- neither → fall through to the landing page
+
+This means the cookie set in the auth callback is load-bearing for the landing UX. Don't drop it. The cookie is `path=/`, `sameSite=lax`, `maxAge=1y`, non-httpOnly so client code could read it later if needed.
+
 ⚠️ **When editing `isPublic`, append — never rewrite the list.** Each entry gates an unauthenticated flow that won't fail loudly: cached HTTP responses on existing devices mask the regression, so it only surfaces in incognito or for first-time visitors. The phase5-admin-pool merge dropped the landing page's static-asset entries this way and the bug shipped to production.
 
 On first sign-in, the `on_auth_user_created` trigger creates a `profiles` row AND inserts a 300s `welcome_gift` ledger entry. Don't duplicate this in application code.

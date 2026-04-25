@@ -63,6 +63,21 @@ export async function middleware(req: NextRequest) {
     path.startsWith('/scenes/') ||
     path.startsWith('/characters/');
 
+  // Root-path branching: only brand-new visitors see the landing story.
+  // - logged-in user        → /home (skip the marketing page entirely)
+  // - returning logged-out  → /login (cookie set on first /auth/callback)
+  // - genuinely new visitor → fall through to the landing page
+  // This runs before the generic auth gate so the gate never gets a chance
+  // to redirect `/` itself.
+  if (path === '/') {
+    if (user) {
+      return NextResponse.redirect(new URL('/home', req.url));
+    }
+    if (req.cookies.get('lt_seen')?.value === '1') {
+      return NextResponse.redirect(new URL('/login', req.url));
+    }
+  }
+
   if (!user && !isAuthRoute && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
