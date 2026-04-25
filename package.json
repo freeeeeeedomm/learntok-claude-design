@@ -12,7 +12,8 @@
     "supabase:push": "supabase db push",
     "gen:types": "supabase gen types typescript --local > lib/supabase/database.types.ts",
     "test": "playwright test",
-    "scrape:tiktok": "tsx --env-file=.env.local scripts/scrape-tiktok.ts"
+    "scrape:tiktok": "tsx --env-file=.env.local scripts/scrape-tiktok.ts",
+    "scrape:tiktok:account": "tsx --env-file=.env.local scripts/scrape-tiktok-account.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.0",
