@@ -8,18 +8,18 @@ This is a **scaffold**, not a finished app. Most pages under `app/` are stubs wi
 
 ## Commands
 
-Package manager is **pnpm**.
+Package manager is **npm** (the lockfile in the repo is `package-lock.json`).
 
 ```bash
-pnpm dev                  # next dev on :3000
-pnpm build                # next build
-pnpm lint                 # next lint (eslint-config-next)
-pnpm test                 # playwright test (no tests exist yet)
-pnpm test path/to.spec.ts # run a single Playwright spec
+npm run dev                # next dev on :3000
+npm run build              # next build
+npm run lint               # next lint (eslint-config-next)
+npm test                   # playwright test (no tests exist yet)
+npm test path/to.spec.ts   # run a single Playwright spec
 
-pnpm supabase:reset       # supabase db reset — applies migrations + seed
-pnpm supabase:push        # supabase db push — apply migrations to remote
-pnpm gen:types            # regenerate lib/supabase/database.types.ts from local DB
+npm run supabase:reset     # supabase db reset — applies migrations + seed
+npm run supabase:push      # supabase db push — apply migrations to remote
+npm run gen:types          # regenerate lib/supabase/database.types.ts from local DB
 ```
 
 No typecheck script; run `npx tsc --noEmit` if needed. `strict: true` is on.
