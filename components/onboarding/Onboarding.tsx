@@ -218,8 +218,7 @@ function PageTopics({
             <button
               key={t.id}
               type="button"
-              role="checkbox"
-              aria-checked={isOn}
+              aria-pressed={isOn}
               onClick={() => onToggle(t.id)}
               data-testid={`topic-tile-${t.id}`}
               data-selected={isOn ? 'true' : 'false'}
@@ -252,7 +251,7 @@ function PageTopics({
                   }}
                 />
               )}
-              <span style={{ fontSize: 20, marginLeft: isOn ? 6 : 0 }}>
+              <span style={{ fontSize: 20, marginLeft: isOn && t.color ? 6 : 0 }}>
                 {t.icon ?? '•'}
               </span>
               <span style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>

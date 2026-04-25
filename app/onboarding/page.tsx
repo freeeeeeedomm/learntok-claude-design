@@ -30,7 +30,7 @@ export default async function OnboardingPage() {
 
   const { data: topicsData } = await supabase
     .from('topics')
-    .select('id, title, icon, color, position')
+    .select('id, title, icon, color')
     .eq('is_preset', true)
     .order('position', { ascending: true });
 
@@ -44,8 +44,8 @@ export default async function OnboardingPage() {
   // profile.interests was previously free-text; only keep entries that match
   // a current preset topic UUID so legacy strings don't pre-select anything.
   const validIds = new Set(topics.map((t) => t.id));
-  const initialTopicIds = (profile?.interests ?? []).filter((s: string) =>
-    validIds.has(s),
+  const initialTopicIds = Array.from(
+    new Set<string>((profile?.interests ?? []).filter((s: string) => validIds.has(s))),
   );
 
   return (
