@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { TopicRail } from '@/components/home/TopicRail';
 
 function fmtBank(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -111,26 +112,6 @@ export default async function HomePage() {
     }
   }
 
-  // For each topic: aggregate counts across its courses.
-  const topicRows = topics.map((t) => {
-    const cs = coursesByTopic.get(t.id) ?? [];
-    const allLs = cs.flatMap((c) => lessonsByCourse.get(c.id) ?? []);
-    const firstCourse = cs[0];
-    const firstYtId = firstCourse
-      ? (lessonsByCourse.get(firstCourse.id) ?? [])[0]?.yt_id ?? null
-      : null;
-    return {
-      id: t.id,
-      title: t.title,
-      icon: t.icon ?? '📚',
-      color: t.color ?? '#5e6ad2',
-      courseCount: cs.length,
-      lessonCount: allLs.length,
-      doneCount: allLs.filter((l) => l.done).length,
-      firstYtId,
-    };
-  });
-
   const weekday = new Date()
     .toLocaleDateString('en', { weekday: 'long' })
     .toLowerCase();
@@ -160,11 +141,14 @@ export default async function HomePage() {
         {continueCard && (
           <a
             href={`/lesson/${continueCard.nextId}`}
-            className="card card-hl mt-16"
+            className="card hero-card mt-16"
             style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
             data-testid="home-continue-card"
           >
-            <div className="eyebrow">continue · {continueCard.topicTitle}</div>
+            <div className="hero-angel" aria-hidden />
+            <div className="eyebrow" style={{ color: 'var(--ink)', fontWeight: 600 }}>
+              continue · {continueCard.topicTitle}
+            </div>
             <div className="display mt-4" style={{ fontSize: 22 }}>
               {continueCard.courseTitle}
             </div>
@@ -187,41 +171,21 @@ export default async function HomePage() {
         )}
 
         <div className="eyebrow mt-24">your topics</div>
-        <div className="col gap-8 mt-8">
-          {topicRows.map((t) => (
-            <a
+        <div className="col mt-8">
+          {topics.map((t) => (
+            <TopicRail
               key={t.id}
-              href={`/topic/${t.id}`}
-              className="lesson-row"
-              style={{ textDecoration: 'none', color: 'inherit' }}
-              data-testid={`home-topic-${t.id}`}
-            >
-              <div
-                className="thumb"
-                style={
-                  t.firstYtId
-                    ? {
-                        backgroundImage: `url(https://i.ytimg.com/vi/${t.firstYtId}/default.jpg)`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                      }
-                    : { background: t.color, color: '#fff' }
-                }
-              >
-                {t.firstYtId ? '' : t.icon}
-              </div>
-              <div className="grow col">
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{t.title}</div>
-                <div className="body" style={{ fontSize: 11 }}>
-                  {t.courseCount} courses · {t.doneCount}/{t.lessonCount} lessons
-                </div>
-              </div>
-              <div style={{ color: 'var(--ink-mute)' }}>›</div>
-            </a>
+              topic={{ id: t.id, title: t.title }}
+              courses={(coursesByTopic.get(t.id) ?? []).map((c) => ({
+                id: c.id,
+                title: c.title,
+              }))}
+              lessonsByCourse={lessonsByCourse}
+            />
           ))}
           <a
             href="/add"
-            className="lesson-row"
+            className="lesson-row mt-12"
             style={{
               borderStyle: 'dashed',
               justifyContent: 'center',
