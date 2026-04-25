@@ -19,12 +19,32 @@ export async function middleware(req: NextRequest) {
 
   const path = req.nextUrl.pathname;
   const isAuthRoute = path.startsWith('/login') || path.startsWith('/auth');
-  // /api/dev/* is gated server-side by NEXT_PUBLIC_DEV_PANEL; let it through here
-  // so the login page can call it before a session exists.
+  //
+  // ┌─────────────────────────────────────────────────────────────────────┐
+  // │ READ BEFORE EDITING `isPublic`                                      │
+  // │                                                                     │
+  // │ Every entry below is load-bearing for some unauthenticated flow.    │
+  // │ When you ADD an entry (e.g. for a new admin or static path), DO     │
+  // │ NOT rewrite the list — APPEND. Removing an entry will silently      │
+  // │ break the flow it gated and the regression usually only shows up    │
+  // │ in incognito / on first-time visitors (cached HTTP responses on     │
+  // │ existing devices mask it).                                          │
+  // │                                                                     │
+  // │ History: phase5-admin-pool merge dropped /videos/, /scenes/,        │
+  // │ /characters/ when adding /admin/* — landing page videos 307'd to    │
+  // │ /login for two days before anyone noticed.                          │
+  // └─────────────────────────────────────────────────────────────────────┘
+  //
+  // /api/dev/* is gated server-side by NEXT_PUBLIC_DEV_PANEL; let it through
+  // here so the login page can call it before a session exists.
+  //
   // /admin/* and /api/admin/* are exempt from the base auth gate so the cookie
   // backdoor can work without a Supabase session. Every page/route under those
   // paths MUST call requireAdmin() or checkAdminForApi() — otherwise it's
   // silently public.
+  //
+  // /videos/, /scenes/, /characters/ are static assets used by the
+  // unauthenticated landing page at `/`. They MUST stay public.
   const isPublic =
     path === '/' ||
     path.startsWith('/_next') ||
