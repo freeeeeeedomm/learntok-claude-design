@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { VideoCard, type AdminVideo } from './VideoCard';
 import { AdminSwipeView } from './AdminSwipeView';
 import { NewVideoForm } from './NewVideoForm';
@@ -20,7 +19,6 @@ export function CategoryView({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [swipeMode, setSwipeMode] = useState(false);
-  const router = useRouter();
 
   const onDelete = async (id: string) => {
     if (deletingIds.has(id)) return;
@@ -50,7 +48,6 @@ export function CategoryView({
 
   const onAddVideo = (newVideo: AdminVideo) => {
     setVideos((vs) => [newVideo, ...vs]);
-    router.refresh();
   };
 
   if (swipeMode) {
