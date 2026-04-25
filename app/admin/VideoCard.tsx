@@ -19,12 +19,19 @@ export function VideoCard({
   onToggleExpand,
   onDelete,
   deleting,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   video: AdminVideo;
   expanded: boolean;
   onToggleExpand: () => void;
   onDelete: () => void;
   deleting: boolean;
+  /** When true, the whole card is a selection target; expand/delete buttons hide */
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   // Try the proxy first (always fresh), fall back to the stored signed
   // URL (may be expired), then give up and show a neutral placeholder.
@@ -49,14 +56,44 @@ export function VideoCard({
   return (
     <div
       className="card col gap-8"
+      onClick={selectMode ? onToggleSelect : undefined}
       style={{
         padding: 8,
         position: 'relative',
         opacity: deleting ? 0.4 : 1,
         pointerEvents: deleting ? 'none' : 'auto',
+        cursor: selectMode ? 'pointer' : 'default',
+        outline: selectMode && selected ? '2px solid var(--accent)' : 'none',
+        outlineOffset: -2,
       }}
       data-testid={`admin-video-card-${video.video_id}`}
+      data-selected={selectMode && selected ? 'true' : undefined}
     >
+      {selectMode && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 12,
+            width: 24,
+            height: 24,
+            borderRadius: 4,
+            background: selected ? 'var(--accent)' : 'rgba(255,255,255,0.85)',
+            border: '2px solid var(--accent)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#000',
+            fontSize: 14,
+            fontWeight: 700,
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}
+        >
+          {selected ? '✓' : ''}
+        </div>
+      )}
       <div
         style={{
           aspectRatio: '9 / 16',
@@ -103,32 +140,34 @@ export function VideoCard({
       >
         {video.author ? `@${video.author}` : '—'}
       </div>
-      <div className="row gap-8">
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
-          onClick={onToggleExpand}
-          data-testid={`admin-video-preview-${video.video_id}`}
-        >
-          {expanded ? 'close' : '👁 preview'}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          style={{
-            fontSize: 12,
-            padding: '6px 10px',
-            color: 'var(--bad)',
-          }}
-          onClick={onDelete}
-          disabled={deleting}
-          data-testid={`admin-video-delete-${video.video_id}`}
-          aria-label="delete video"
-        >
-          🗑
-        </button>
-      </div>
+      {!selectMode && (
+        <div className="row gap-8">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ flex: 1, fontSize: 12, padding: '6px 8px' }}
+            onClick={onToggleExpand}
+            data-testid={`admin-video-preview-${video.video_id}`}
+          >
+            {expanded ? 'close' : '👁 preview'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{
+              fontSize: 12,
+              padding: '6px 10px',
+              color: 'var(--bad)',
+            }}
+            onClick={onDelete}
+            disabled={deleting}
+            data-testid={`admin-video-delete-${video.video_id}`}
+            aria-label="delete video"
+          >
+            🗑
+          </button>
+        </div>
+      )}
     </div>
   );
 }
