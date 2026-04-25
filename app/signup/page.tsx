@@ -21,12 +21,13 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const google = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${location.origin}/auth/callback` },
+      options: { redirectTo: `${location.origin}/auth/callback?intent=signup` },
     });
   };
 
@@ -38,11 +39,19 @@ export default function SignupPage() {
     }
     setBusy(true);
     setError(null);
+    setAlreadyRegistered(false);
     await supabase.auth.signOut();
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     setBusy(false);
     if (error) {
       setError(error.message);
+      return;
+    }
+    // Supabase obfuscates "already registered" to prevent email enumeration:
+    // it returns a user object with empty `identities` and sends no email.
+    // Detect that signal and show the "log in instead" branch.
+    if (data?.user && data.user.identities?.length === 0) {
+      setAlreadyRegistered(true);
       return;
     }
     setStage('verify');
@@ -82,6 +91,7 @@ export default function SignupPage() {
       ? () => {
           setStage('entry');
           setError(null);
+          setAlreadyRegistered(false);
         }
       : () => {
           setStage('credentials');
@@ -163,6 +173,15 @@ export default function SignupPage() {
             {busy ? 'Sending code…' : 'Continue'}
           </AuthButton>
           {error && <p className="text-sm text-bad text-center">{error}</p>}
+          {alreadyRegistered && (
+            <p className="text-sm text-bad text-center">
+              This email already has an account.{' '}
+              <Link href="/login" className="text-accent font-semibold underline">
+                Log in instead
+              </Link>
+              .
+            </p>
+          )}
         </form>
       )}
 

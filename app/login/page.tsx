@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AuthShell } from '@/components/auth/AuthShell';
@@ -13,8 +13,10 @@ import {
 
 type Stage = 'entry' | 'email' | 'password' | 'code' | 'forgot';
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const notice = searchParams.get('notice');
   const supabase = createClient();
   const [stage, setStage] = useState<Stage>('entry');
   const [email, setEmail] = useState('');
@@ -161,9 +163,17 @@ export default function LoginPage() {
     <AuthShell onBack={onBack}>
       {stage === 'entry' && (
         <>
-          <h1 className="font-serif text-4xl leading-tight text-center mb-10">
+          <h1 className="font-serif text-4xl leading-tight text-center mb-6">
             Welcome back
           </h1>
+          {notice === 'existing-account' && (
+            <div
+              role="status"
+              className="bg-bg-2 border border-line rounded-xl px-4 py-3 mb-6 text-sm text-ink-soft text-center"
+            >
+              This account already exists. Log in to continue.
+            </div>
+          )}
           {devPanelEnabled && (
             <>
               <button
@@ -316,5 +326,13 @@ export default function LoginPage() {
         </div>
       )}
     </AuthShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
   );
 }
