@@ -66,6 +66,7 @@ export async function POST(req: Request) {
     thumbnail_url: oembedJson.thumbnail_url ?? null,
     is_active: true,
     scraped_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   };
 
   const { data: upserted, error } = await sb
