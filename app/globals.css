@@ -14,8 +14,8 @@
   --ink-soft: #5a6068;
   --ink-mute: #8b92a0;
   --line: #e3e5e9;
-  --accent: #5e6ad2;
-  --accent-2: #4c56c4;
+  --accent: #0e0f12;
+  --accent-2: #000000;
   --nibs: #d85a3e;
   --angel: #f4c874;
   --good: #10b981;
@@ -296,6 +296,113 @@ html, body {
   }
   .angel-exit-label {
     letter-spacing: 0.02em;
+  }
+
+  /* Continue hero — overflow visible so the angel can hang off the top-right. */
+  .hero-card { position: relative; overflow: visible; }
+  .hero-angel {
+    position: absolute;
+    right: -4px;
+    top: -58px;
+    width: 86px;
+    height: 86px;
+    background: url('/characters/angel-plush.png') no-repeat center/contain;
+    pointer-events: none;
+  }
+
+  /* Topic rail — Netflix-style horizontal scroll. The negative margin + padding
+     trick lets the rail bleed to the screen edges so the last visible card
+     peeks past the page padding (signal: "you can scroll"). */
+  .rail-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 14px 0 6px;
+  }
+  .rail-title .rt {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .rail-title .rm {
+    font-size: 11px;
+    color: var(--ink-mute);
+  }
+
+  .rail {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 4px 20px 16px;
+    margin: 0 -20px;
+    scrollbar-width: none;
+  }
+  .rail::-webkit-scrollbar { display: none; }
+
+  .rail-card {
+    flex: 0 0 148px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .rail-thumb {
+    width: 100%;
+    height: 80px;
+    border-radius: 8px;
+    background-color: var(--bg-3);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+  }
+  .rail-thumb .dur {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: var(--mono);
+  }
+  .rail-t {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .rail-meta {
+    font-size: 10px;
+    color: var(--ink-mute);
+  }
+  .rail-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--bg-3);
+    overflow: hidden;
+  }
+  .rail-bar > i {
+    display: block;
+    height: 100%;
+    background: var(--ink);
+  }
+
+  /* Empty state pill for a topic with zero courses. */
+  .rail-empty {
+    padding: 10px 14px;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    color: var(--ink-mute);
+    font-size: 12px;
+    margin-bottom: 12px;
   }
 }
 

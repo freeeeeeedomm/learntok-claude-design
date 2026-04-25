@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import Image from 'next/image';
+import { Home, Coffee, TrendingUp } from 'lucide-react';
 
 const HIDE_PATTERNS = [
   /^\/$/,
@@ -11,6 +11,8 @@ const HIDE_PATTERNS = [
   /^\/lesson\//,
   /^\/feed(\/|$)/,
 ];
+
+const ICON_PROPS = { size: 22, strokeWidth: 1.8 } as const;
 
 export function BottomNav() {
   const pathname = usePathname() ?? '/';
@@ -40,7 +42,9 @@ export function BottomNav() {
         aria-current={isHome ? 'page' : undefined}
         data-testid="nav-home"
       >
-        <span className="bottom-nav-icon" aria-hidden>🏠</span>
+        <span className="bottom-nav-icon" aria-hidden>
+          <Home {...ICON_PROPS} />
+        </span>
         <span className="bottom-nav-label">home</span>
       </a>
       <a
@@ -50,13 +54,7 @@ export function BottomNav() {
         data-testid="nav-relax"
       >
         <span className="bottom-nav-icon" aria-hidden>
-          <Image
-            src="/characters/nibs.png"
-            alt=""
-            width={28}
-            height={28}
-            priority
-          />
+          <Coffee {...ICON_PROPS} />
         </span>
         <span className="bottom-nav-label">relax</span>
       </a>
@@ -66,7 +64,9 @@ export function BottomNav() {
         aria-current={isProgress ? 'page' : undefined}
         data-testid="nav-progress"
       >
-        <span className="bottom-nav-icon" aria-hidden>📊</span>
+        <span className="bottom-nav-icon" aria-hidden>
+          <TrendingUp {...ICON_PROPS} />
+        </span>
         <span className="bottom-nav-label">progress</span>
       </a>
     </nav>
