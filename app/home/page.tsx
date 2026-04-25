@@ -18,21 +18,30 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, streak, jar_balance_cached, onboarded')
+    .select('display_name, streak, jar_balance_cached, onboarded, interests')
     .eq('id', user.id)
     .single();
 
   if (!profile?.onboarded) redirect('/onboarding');
 
-  const [topicsRes, coursesRes, lessonsRes, progressRes] = await Promise.all([
+  const interestIds = (profile?.interests ?? []) as string[];
+
+  const [topicsRes, shelfRes, lessonsRes, progressRes] = await Promise.all([
+    interestIds.length > 0
+      ? supabase
+          .from('topics')
+          .select('id, title, icon, color, position, is_preset')
+          .in('id', interestIds)
+          .order('is_preset', { ascending: false })
+          .order('position', { ascending: true })
+      : Promise.resolve({ data: [] as Array<{
+          id: string; title: string; icon: string | null;
+          color: string | null; position: number; is_preset: boolean;
+        }>, error: null }),
     supabase
-      .from('topics')
-      .select('id, title, icon, color, position, is_preset')
-      .order('is_preset', { ascending: false })
-      .order('position', { ascending: true }),
-    supabase
-      .from('courses')
-      .select('id, topic_id, title, icon, position, is_preset')
+      .from('profile_courses')
+      .select('course_id, position, courses!inner(id, topic_id, title, icon, position, is_preset)')
+      .eq('user_id', user.id)
       .order('position', { ascending: true }),
     supabase
       .from('lessons')
@@ -45,7 +54,15 @@ export default async function HomePage() {
   ]);
 
   const topics = topicsRes.data ?? [];
-  const courses = coursesRes.data ?? [];
+  // Flatten the join result into the same shape as the previous courses array.
+  const courses = (shelfRes.data ?? []).map((row: any) => ({
+    id: row.courses.id as string,
+    topic_id: row.courses.topic_id as string | null,
+    title: row.courses.title as string,
+    icon: row.courses.icon as string | null,
+    position: row.position as number, // shelf-position, not course.position
+    is_preset: row.courses.is_preset as boolean,
+  }));
   const lessons = lessonsRes.data ?? [];
   const progress = progressRes.data ?? [];
   const doneIds = new Set(
