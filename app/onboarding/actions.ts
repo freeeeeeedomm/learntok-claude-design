@@ -28,6 +28,9 @@ export async function completeOnboarding(raw: { rate: number; topicIds: string[]
   // Resolve only-preset topic rows. RLS already restricts reads to preset or
   // owned topics, but we additionally require is_preset = true here so a
   // malicious caller can't stuff their own topic UUIDs into interests.
+  // The length-equality check below also rejects duplicate UUIDs in the
+  // input: a duplicate would make the `in (...)` query return fewer rows
+  // than requested, triggering invalid_topic. Deduplicate on the client.
   let presetIds: string[] = [];
   if (topicIds.length > 0) {
     const { data: topicsData, error: topicsErr } = await supabase
