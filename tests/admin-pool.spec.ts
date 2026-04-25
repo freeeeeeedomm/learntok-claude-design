@@ -12,8 +12,6 @@ const TEST_VIDEO_IDS = [
 ];
 
 test.beforeEach(async () => {
-  // Hard-delete any leftover test rows (avoid "row already exists, soft-deleted")
-  // so each test starts from a known clean slate.
   const a = admin();
   await a.from('video_pool').delete().in('video_id', TEST_VIDEO_IDS);
 
@@ -50,20 +48,20 @@ test.afterEach(async () => {
   await a.from('video_pool').delete().in('video_id', TEST_VIDEO_IDS);
 });
 
-test('admin pool: grid shows seeded videos and category tab filters', async ({
+test('admin pool: each category page shows only its own videos', async ({
   page,
 }) => {
   await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
 
-  await page.goto('/admin');
+  await page.goto('/admin/喜剧');
   await expect(page.getByTestId('admin-video-grid')).toBeVisible();
   await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[0]}`)).toBeVisible();
-  await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[2]}`)).toBeVisible();
-
-  // Filter to 喜剧: animal video should be hidden, two comedy videos visible.
-  await page.getByTestId('admin-tab-喜剧').click();
-  await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[0]}`)).toBeVisible();
+  await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[1]}`)).toBeVisible();
   await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[2]}`)).toHaveCount(0);
+
+  await page.goto('/admin/动物');
+  await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[2]}`)).toBeVisible();
+  await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[0]}`)).toHaveCount(0);
 });
 
 test('admin pool: soft delete removes card and persists across reload', async ({
@@ -71,10 +69,8 @@ test('admin pool: soft delete removes card and persists across reload', async ({
 }) => {
   await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
 
-  await page.goto('/admin');
+  await page.goto('/admin/喜剧');
 
-  // Click delete and wait for the PATCH response before reloading — otherwise
-  // the in-flight request can be aborted by the navigation.
   const patchResponse = page.waitForResponse(
     (res) =>
       res.url().includes('/api/admin/video-pool/') && res.request().method() === 'PATCH'
@@ -85,9 +81,7 @@ test('admin pool: soft delete removes card and persists across reload', async ({
 
   await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[0]}`)).toHaveCount(0);
 
-  // Reload — the row should still be gone (soft delete persisted).
   await page.reload();
   await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[0]}`)).toHaveCount(0);
-  // Other test videos still present.
   await expect(page.getByTestId(`admin-video-card-${TEST_VIDEO_IDS[1]}`)).toBeVisible();
 });

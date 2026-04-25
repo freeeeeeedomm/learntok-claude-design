@@ -29,8 +29,7 @@ test.afterEach(async () => {
 test('admin swipe: enter → navigate → exit', async ({ page }) => {
   await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
 
-  await page.goto('/admin');
-  await page.getByTestId('admin-tab-喜剧').click();
+  await page.goto('/admin/喜剧');
   await page.getByTestId('admin-review-enter').click();
 
   await expect(page.getByTestId('admin-swipe-view')).toBeVisible();
@@ -72,8 +71,7 @@ test('admin swipe: enter → navigate → exit', async ({ page }) => {
 test('admin swipe: delete + undo within 3s → DB unchanged', async ({ page }) => {
   await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
 
-  await page.goto('/admin');
-  await page.getByTestId('admin-tab-喜剧').click();
+  await page.goto('/admin/喜剧');
   await page.getByTestId('admin-review-enter').click();
 
   // Confirm we're on video 1/3.
@@ -106,8 +104,7 @@ test('admin swipe: delete + timeout → soft-delete persisted + grid shrinks', a
 }) => {
   await page.request.post('/api/admin/unlock', { data: { password: ADMIN_PASSWORD } });
 
-  await page.goto('/admin');
-  await page.getByTestId('admin-tab-喜剧').click();
+  await page.goto('/admin/喜剧');
   await page.getByTestId('admin-review-enter').click();
 
   // Identify which video is shown first (depends on created_at desc order,
