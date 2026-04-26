@@ -16,11 +16,20 @@
  * /api/admin/video-pool route's behavior.
  */
 
-import { chromium, type Page } from '@playwright/test';
+import { chromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import type { BrowserContext, Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
 import { mkdir } from 'fs/promises';
 import { createInterface } from 'readline';
 import { buildVideoUrl } from '../lib/tiktok-url';
+
+// Stealth plugin: patches navigator.webdriver, plugins, languages,
+// permissions etc. so TikTok's anti-bot doesn't immediately serve us
+// captcha / empty item lists. Combined with `channel: 'chrome'` (real
+// installed Chrome instead of bundled Chromium), this is usually
+// enough to let QR / email login succeed.
+chromium.use(StealthPlugin());
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -30,7 +39,10 @@ if (!SUPABASE_URL || !SERVICE_ROLE) {
   process.exit(1);
 }
 
-const PROFILE_DIR = './data/playwright-profile';
+// Separate from the explore-mode scraper's Chromium profile because we
+// switched to real Chrome (channel: 'chrome'). Mixing data dirs across
+// browser binaries can corrupt the profile.
+const PROFILE_DIR = './data/playwright-profile-chrome';
 const MAX_SCROLLS = 30;
 const SCROLL_DELAY_MS = 1200;
 
@@ -90,12 +102,6 @@ async function waitForEnter(prompt: string): Promise<void> {
   });
 }
 
-async function hasVideoTiles(page: Page): Promise<number> {
-  return page.evaluate(
-    () => document.querySelectorAll('a[href*="/video/"]').length
-  );
-}
-
 async function isLoggedIn(page: Page): Promise<boolean> {
   // Crude but effective: when logged out, TikTok renders huge `登录` /
   // `Log in` CTAs in the top-right and sidebar. When logged in, those
@@ -127,91 +133,51 @@ async function dismissModals(page: Page): Promise<void> {
   });
 }
 
-interface ScrollSnapshot {
-  iter: number;
-  anchors: number;
-  matched: number;
-  firstHrefs: string[];
-}
-
-async function collectVideoIds(
-  page: Page,
-  handle: string,
-  needed: number
-): Promise<{ candidates: Candidate[]; snapshots: ScrollSnapshot[] }> {
-  const seen = new Map<string, string>();
-  const snapshots: ScrollSnapshot[] = [];
-  // Match handle case-insensitively (TikTok stores them lowercase but the
-  // user might paste a mixed-case handle).
-  const handleLc = handle.toLowerCase();
-
-  for (let i = 0; i < MAX_SCROLLS; i++) {
-    if (seen.size >= needed * 1.5) break;
-    await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.5));
-    await page.waitForTimeout(SCROLL_DELAY_MS);
-    const result: {
-      anchors: number;
-      matched: { id: string; author: string }[];
-      firstHrefs: string[];
-    } = await page.evaluate((h) => {
-      const all = Array.from(document.querySelectorAll('a[href*="/video/"]'));
-      const matched: Array<{ id: string; author: string }> = [];
-      const firstHrefs: string[] = [];
-      for (const a of all) {
-        const href = (a as HTMLAnchorElement).href;
-        if (firstHrefs.length < 3) firstHrefs.push(href);
-        const m = href.match(/@([^/]+)\/video\/(\d+)/);
-        if (m && m[1].toLowerCase() === h) {
-          matched.push({ author: m[1], id: m[2] });
-        }
-      }
-      return { anchors: all.length, matched, firstHrefs };
-    }, handleLc);
-
-    snapshots.push({
-      iter: i,
-      anchors: result.anchors,
-      matched: result.matched.length,
-      firstHrefs: result.firstHrefs,
-    });
-    for (const { id, author } of result.matched) seen.set(id, author);
-  }
-  return {
-    candidates: [...seen.entries()].map(([id, author]) => ({ id, author })),
-    snapshots,
-  };
-}
-
 /**
- * Extract video candidates by walking the JSON blob TikTok embeds in
- * `<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">`. This is way more
- * reliable than DOM scraping because (a) playlist pages don't use
- * `<a href>` for tiles, (b) DOM-based selectors break every time TikTok
- * tweaks its components, (c) the JSON is the same data the page
- * renders from.
+ * Set up a network response listener that captures TikTok's item-list
+ * API responses. The SSR'd HTML doesn't contain the user's video list —
+ * those load via XHR after the page mounts. Intercepting them is the
+ * most reliable extraction path.
  *
- * Implementation note: written as an iterative stack walk (no inner
- * arrow-function helpers) because tsx/esbuild injects a `__name()`
- * helper around named arrow functions, which then errors out as
- * "ReferenceError: __name is not defined" inside page.evaluate.
+ * Returns a `harvest()` function that walks captured responses for
+ * candidates whose author matches `handle`.
  */
-async function extractVideosFromJson(
-  page: Page,
+function attachItemListInterceptor(
+  context: BrowserContext,
   handle: string
-): Promise<Candidate[]> {
-  return page.evaluate((h) => {
-    const script = document.querySelector(
-      'script#__UNIVERSAL_DATA_FOR_REHYDRATION__'
-    );
-    if (!script || !script.textContent) return [];
-    let data: unknown;
-    try {
-      data = JSON.parse(script.textContent);
-    } catch {
-      return [];
+): {
+  harvest: () => Candidate[];
+  count: () => number;
+} {
+  const handleLc = handle.toLowerCase();
+  const captured: unknown[] = [];
+
+  context.on('response', async (resp) => {
+    const url = resp.url();
+    // TikTok's item-list / playlist / collection endpoints. Loose
+    // match — they tweak path versions periodically. Witnessed in the
+    // wild on a clean Chromium load:
+    //   /api/post/item_list/?...
+    //   /api/user/collection_list/?...
+    if (
+      !/\/api\/(post|user|playlist|post_v[0-9])\/.*list/i.test(url) &&
+      !/\/api\/playlist\/item/i.test(url)
+    ) {
+      return;
     }
+    try {
+      const ct = resp.headers()['content-type'] ?? '';
+      if (!ct.includes('json')) return;
+      const json: unknown = await resp.json();
+      captured.push(json);
+    } catch {
+      // Ignore — body might already be consumed or non-JSON
+    }
+  });
+
+  const harvest = (): Candidate[] => {
     const seen = new Map<string, string>();
-    const stack: unknown[] = [data];
+    const stack: unknown[] = [...captured];
     while (stack.length) {
       const cur = stack.pop();
       if (!cur || typeof cur !== 'object') continue;
@@ -220,38 +186,36 @@ async function extractVideosFromJson(
         continue;
       }
       const o = cur as Record<string, unknown>;
-      if (typeof o.id === 'string' && /^\d{15,20}$/.test(o.id)) {
-        let author = h;
+      const looksLikeVideo =
+        typeof o.id === 'string' &&
+        /^\d{15,20}$/.test(o.id) &&
+        (typeof o.desc === 'string' ||
+          (o.video !== null && typeof o.video === 'object') ||
+          (o.stats !== null && typeof o.stats === 'object') ||
+          typeof o.createTime === 'number');
+      if (looksLikeVideo) {
+        let author = handleLc;
         const a = o.author as Record<string, unknown> | undefined;
         if (a && typeof a.uniqueId === 'string') author = a.uniqueId;
         else if (typeof o.authorName === 'string') author = o.authorName;
-        if (!seen.has(o.id)) seen.set(o.id, author);
+        // Only keep videos whose author matches the requested handle
+        // (item_list responses sometimes include "you might like" mixed in).
+        if (
+          author.toLowerCase() === handleLc &&
+          !seen.has(o.id as string)
+        ) {
+          seen.set(o.id as string, author);
+        }
       }
-      const keys = Object.keys(o);
-      for (let i = 0; i < keys.length; i++) stack.push(o[keys[i]]);
+      for (const key of Object.keys(o)) stack.push(o[key]);
     }
-    return Array.from(seen.entries()).map(([id, author]) => ({ id, author }));
-  }, handle);
-}
+    return [...seen.entries()].map(([id, author]) => ({ id, author }));
+  };
 
-async function findPlaylistUrls(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const anchors = Array.from(
-      document.querySelectorAll('a[href*="/playlist/"]')
-    );
-    const urls = new Set<string>();
-    for (const a of anchors) {
-      const href = (a as HTMLAnchorElement).href;
-      // Drop fragment / cache-busting params.
-      try {
-        const u = new URL(href);
-        urls.add(`${u.origin}${u.pathname}`);
-      } catch {
-        urls.add(href);
-      }
-    }
-    return [...urls];
-  });
+  return {
+    harvest,
+    count: () => captured.length,
+  };
 }
 
 async function verifyEmbed(c: Candidate): Promise<Verified | null> {
@@ -294,127 +258,84 @@ async function main(): Promise<void> {
 
   const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
     headless: false,
+    channel: 'chrome', // real installed Chrome, not bundled Chromium
     viewport: { width: 1280, height: 900 },
   });
-  const page = await ctx.newPage();
+  const page = ctx.pages()[0] ?? (await ctx.newPage());
+
+  // Hook the network interceptor BEFORE any navigation so we don't miss
+  // the very first item-list response.
+  const interceptor = attachItemListInterceptor(ctx, handle);
+
+  // Helper: scroll a page repeatedly to trigger lazy-load API calls.
+  // Each scroll fires another item-list XHR which the interceptor catches.
+  const scrollUntilEnough = async (target: number, maxScrolls = 12) => {
+    for (let i = 0; i < maxScrolls; i++) {
+      const have = interceptor.harvest().length;
+      if (have >= target) return;
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.2));
+      await page.waitForTimeout(SCROLL_DELAY_MS);
+    }
+  };
+
+  const candidatesMap = new Map<string, string>();
+  const mergeFromInterceptor = (label: string) => {
+    const got = interceptor.harvest();
+    const before = candidatesMap.size;
+    for (const c of got) candidatesMap.set(c.id, c.author);
+    const added = candidatesMap.size - before;
+    console.log(
+      `    [${label}] +${added} from API (${interceptor.count()} responses captured, total unique: ${candidatesMap.size})`
+    );
+  };
 
   try {
     const profileUrl = `https://www.tiktok.com/@${handle}`;
     console.log(`  goto ${profileUrl}`);
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
-    await page
-      .waitForSelector('a[href*="/video/"], [data-e2e="user-post-item"]', {
-        timeout: 8000,
-      })
-      .catch(() => null);
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
     await dismissModals(page);
+    await scrollUntilEnough(count);
+    mergeFromInterceptor('initial');
 
-    // TikTok refuses to render the main video grid for logged-out /
-    // bot-suspected sessions ("出错了, 请稍后重试"). But the embedded
-    // JSON often still has the video list, and playlist pages render
-    // separately — try both before bothering the user to log in.
-    let tileCount = await hasVideoTiles(page);
-    const candidatesMap = new Map<string, string>();
-
-    // Profile-page JSON: cheaper than visiting playlists.
-    const profileJson = await extractVideosFromJson(page, handle);
-    for (const c of profileJson) candidatesMap.set(c.id, c.author);
-    if (profileJson.length > 0) {
-      console.log(`  extracted ${profileJson.length} video(s) from profile JSON`);
-    }
-
-    if (tileCount === 0 && candidatesMap.size === 0) {
-      console.log(
-        '  main grid empty — trying playlist fallback (no login needed)'
-      );
-      const playlists = await findPlaylistUrls(page);
-      console.log(`  found ${playlists.length} playlist(s) on profile`);
-      for (const plUrl of playlists) {
-        if (candidatesMap.size >= count * 1.5) break;
-        console.log(`    visit ${plUrl}`);
-        await page.goto(plUrl, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(2500);
-
-        // Try JSON extraction first (most reliable). Then anchors. If
-        // both empty, prompt the user to solve any captcha in Chrome.
-        let jsonCands = await extractVideosFromJson(page, handle);
-        let anchorRes = await collectVideoIds(page, handle, count);
-        let combined = new Map<string, string>();
-        for (const c of jsonCands) combined.set(c.id, c.author);
-        for (const c of anchorRes.candidates) combined.set(c.id, c.author);
-
-        if (combined.size === 0) {
-          console.log(
-            '      empty — likely captcha. Solve it in the open Chrome,'
-          );
-          console.log('      wait for the playlist videos to render, then');
-          await waitForEnter('      >>> press ENTER to retry: ');
-          await page.waitForTimeout(1000);
-          jsonCands = await extractVideosFromJson(page, handle);
-          anchorRes = await collectVideoIds(page, handle, count);
-          combined = new Map<string, string>();
-          for (const c of jsonCands) combined.set(c.id, c.author);
-          for (const c of anchorRes.candidates) combined.set(c.id, c.author);
-        }
-
-        const before = candidatesMap.size;
-        for (const [id, author] of combined) candidatesMap.set(id, author);
-        console.log(
-          `      ${candidatesMap.size - before} new from this playlist ` +
-            `(json=${jsonCands.length}, anchors=${anchorRes.candidates.length}, ` +
-            `total=${candidatesMap.size})`
-        );
-      }
-    }
-
-    // If we still have nothing, fall back to interactive login on the
-    // profile page (some accounts don't expose playlists at all).
+    // If 0 — TikTok served an empty itemList because we're not
+    // authenticated. Pause and let the user log in (or solve a
+    // captcha) in the visible Chrome window, then retry.
     if (candidatesMap.size === 0) {
       const loggedIn = await isLoggedIn(page);
       console.log('');
-      console.log('  ⚠ no videos found via grid or playlists.');
       if (!loggedIn) {
-        console.log('  You are NOT logged in. Log in via the open Chrome');
-        console.log(
-          '  (use phone QR / TikTok email — Google login is blocked by Google).'
-        );
+        console.log('  ⚠ Not logged in — TikTok returns empty list.');
+        console.log('  In the open Chrome:');
+        console.log('   1. Click the 登录 button');
+        console.log('   2. Pick "使用手机/邮箱" (QR scan or email/password)');
+        console.log('   3. Sign in');
       } else {
         console.log(
-          '  Logged in but still empty — captcha? refresh in Chrome and retry.'
+          '  ⚠ Logged in but list still empty — captcha? Solve it in Chrome.'
         );
       }
-      await waitForEnter('  >>> press ENTER when ready to retry: ');
+      console.log('   4. Wait until you see the user video grid populated');
+      await waitForEnter('  >>> then press ENTER here to continue: ');
+
+      // Re-navigate so a fresh item-list request fires now that we have
+      // an authenticated session. Then scroll to trigger more pages.
       await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2500);
-      const { candidates: retry } = await collectVideoIds(page, handle, count);
-      for (const c of retry) candidatesMap.set(c.id, c.author);
-      console.log(`  after retry: ${candidatesMap.size} candidate(s)`);
+      await scrollUntilEnough(count);
+      mergeFromInterceptor('after-login');
     }
 
     const candidates: Candidate[] = [...candidatesMap.entries()].map(
       ([id, author]) => ({ id, author })
     );
     console.log(`  collected ${candidates.length} candidate IDs total`);
-    // unused snapshots from the original direct-grid path
-    const snapshots: ScrollSnapshot[] = [];
 
     if (candidates.length === 0) {
-      // Diagnostic dump so we can tell whether the page didn't load,
-      // anti-bot intercepted, or our filter is wrong.
-      const last = snapshots[snapshots.length - 1];
       console.log('  diagnostic:');
       console.log(`    final URL: ${page.url()}`);
       console.log(`    page title: ${await page.title()}`);
-      if (last) {
-        console.log(
-          `    last scroll: anchors=${last.anchors} matched=${last.matched}`
-        );
-        if (last.firstHrefs.length) {
-          console.log('    sample anchor hrefs:');
-          last.firstHrefs.forEach((h) => console.log(`      ${h}`));
-        }
-      }
+      console.log(`    API responses captured: ${interceptor.count()}`);
       try {
         await mkdir('./data', { recursive: true });
         const shotPath = `./data/scrape-debug-${handle}.png`;
