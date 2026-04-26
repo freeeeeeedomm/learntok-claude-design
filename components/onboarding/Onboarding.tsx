@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { RestSlider } from './RestSlider';
+import { LucideIcon } from '@/components/discover/LucideIcon';
 
 type GroupLite = {
   key: string;
@@ -191,7 +192,7 @@ function PageGroups({
                 overflow: 'hidden',
               }}
             >
-              <span style={{ fontSize: 22 }}>{g.icon ?? '•'}</span>
+              <LucideIcon name={g.icon} size={28} />
               <span className="col" style={{ gap: 2 }}>
                 <span style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>
                   {g.title}
@@ -204,7 +205,7 @@ function PageGroups({
                   }}
                   data-testid={`group-tile-${g.key}-subtitle`}
                 >
-                  {g.title} · {g.topicCount} subjects
+                  {g.topicCount} subjects
                 </span>
               </span>
             </button>
