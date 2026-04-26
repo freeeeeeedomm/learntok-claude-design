@@ -170,7 +170,7 @@ function PageDeal({
         </div>
 
         <div className="body" style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
-          you can change this anytime.
+          you can adjust this later.
         </div>
       </div>
 
