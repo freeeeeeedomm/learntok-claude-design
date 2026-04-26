@@ -215,14 +215,19 @@ export default async function HomePage() {
         />
 
         {continueCard && (
-          <ContinueRow
-            topicTitle={continueCard.topicTitle}
-            courseTitle={continueCard.courseTitle}
-            nextLessonId={continueCard.nextLessonId}
-            nextLessonDurSec={continueCard.nextLessonDurSec}
-            ytId={continueCard.ytId}
-            donePct={continueCard.donePct}
-          />
+          <>
+            <div className="eyebrow mt-24" data-testid="home-continue-eyebrow">
+              continue learning
+            </div>
+            <ContinueRow
+              topicTitle={continueCard.topicTitle}
+              courseTitle={continueCard.courseTitle}
+              nextLessonId={continueCard.nextLessonId}
+              nextLessonDurSec={continueCard.nextLessonDurSec}
+              ytId={continueCard.ytId}
+              donePct={continueCard.donePct}
+            />
+          </>
         )}
 
         <div className="row between aic mt-24">
