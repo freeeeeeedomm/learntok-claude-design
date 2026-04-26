@@ -28,31 +28,38 @@ export default async function OnboardingPage() {
 
   if (profile?.onboarded) redirect('/home');
 
-  const { data: topicsData } = await supabase
-    .from('topics')
-    .select('id, title, icon, color')
+  // Fetch the 5 preset groups in display order.
+  const { data: groupsData } = await supabase
+    .from('topic_groups')
+    .select('id, key, title, icon, position')
     .eq('is_preset', true)
     .order('position', { ascending: true });
 
-  const topics = (topicsData ?? []).map((t) => ({
-    id: t.id,
-    title: t.title,
-    icon: t.icon,
-    color: t.color,
-  }));
+  // Fetch topic counts per group for the chip subtitle ("group · N 学科").
+  // Single round-trip; aggregate in JS to keep the query simple.
+  const { data: topicCountsData } = await supabase
+    .from('topics')
+    .select('group_id')
+    .eq('is_preset', true)
+    .not('group_id', 'is', null);
 
-  // profile.interests was previously free-text; only keep entries that match
-  // a current preset topic UUID so legacy strings don't pre-select anything.
-  const validIds = new Set(topics.map((t) => t.id));
-  const initialTopicIds = Array.from(
-    new Set<string>((profile?.interests ?? []).filter((s: string) => validIds.has(s))),
-  );
+  const countByGroup = new Map<string, number>();
+  for (const t of topicCountsData ?? []) {
+    if (!t.group_id) continue;
+    countByGroup.set(t.group_id, (countByGroup.get(t.group_id) ?? 0) + 1);
+  }
+
+  const groups = (groupsData ?? []).map((g) => ({
+    key: g.key ?? '',
+    title: g.title,
+    icon: g.icon,
+    topicCount: countByGroup.get(g.id) ?? 0,
+  }));
 
   return (
     <Onboarding
-      topics={topics}
+      groups={groups}
       initialLearnMinutes={rateToLearnMinutes(profile?.rate)}
-      initialTopicIds={initialTopicIds}
       onFinish={completeOnboarding}
     />
   );
