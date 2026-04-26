@@ -7,6 +7,8 @@ interface VideoEmbedProps {
   videoId: string;
   /** true = absolute-fill parent; false = aspect-ratio container that sizes from width. */
   fillHeight?: boolean;
+  /** External ref to the underlying iframe (forwarded for YouTube only — TikTok uses an internal ref for postMessage). */
+  iframeRef?: React.Ref<HTMLIFrameElement>;
 }
 
 /**
@@ -21,7 +23,7 @@ interface VideoEmbedProps {
  * YouTube: standard /embed/ endpoint. Consumers control play/pause via the
  * YT iframe API (outside this component's scope).
  */
-export function VideoEmbed({ source, videoId, fillHeight = false }: VideoEmbedProps) {
+export function VideoEmbed({ source, videoId, fillHeight = false, iframeRef: externalIframeRef }: VideoEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const sendTikTokCommand = useCallback((type: string, value?: unknown) => {
@@ -82,7 +84,7 @@ export function VideoEmbed({ source, videoId, fillHeight = false }: VideoEmbedPr
   return (
     <div style={containerStyle} data-testid="video-embed">
       <iframe
-        ref={iframeRef}
+        ref={source === 'youtube' ? externalIframeRef ?? iframeRef : iframeRef}
         key={`${source}-${videoId}`}
         src={iframeSrc}
         title={`${source} video`}
