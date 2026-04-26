@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { VideoCard, type AdminVideo } from './VideoCard';
 import { AdminSwipeView } from './AdminSwipeView';
 import { NewVideoForm } from './NewVideoForm';
+import { CategoryManageBar } from './CategoryManageBar';
 
 export function CategoryView({
   initialVideos,
@@ -97,13 +98,19 @@ export function CategoryView({
         body: JSON.stringify({ ids }),
       });
       if (!res.ok) {
-        // restore on failure
+        // Surface the actual error so we can debug instead of silently
+        // swallowing it. Restore the optimistic UI removal too.
+        const text = await res.text().catch(() => '');
+        // eslint-disable-next-line no-console
+        console.error('bulk-delete failed', res.status, text);
         setVideos(snapshot);
-        alert('批量删除失败,稍后再试');
+        alert(`批量删除失败 (${res.status}): ${text || '未知错误'}`);
         return;
       }
       exitSelectMode();
-    } catch {
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('bulk-delete network error', e);
       setVideos(snapshot);
       alert('网络出错');
     } finally {
@@ -124,6 +131,9 @@ export function CategoryView({
 
   return (
     <div className="col gap-16 mt-16" style={{ paddingBottom: selectMode ? 80 : 0 }}>
+      {slug && !selectMode && (
+        <CategoryManageBar slug={slug} videoCount={videos.length} />
+      )}
       {slug && !selectMode && <NewVideoForm category={slug} onAdded={onAddVideo} />}
 
       <div
@@ -236,7 +246,8 @@ export function CategoryView({
             gap: 12,
             justifyContent: 'space-between',
             alignItems: 'center',
-            zIndex: 10,
+            // Above BottomNav (z-index 40) and any other fixed admin chrome
+            zIndex: 50,
           }}
           data-testid="admin-bulk-delete-bar"
         >
