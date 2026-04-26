@@ -21,12 +21,14 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: process.env.PW_BASE_URL ?? 'http://localhost:3000',
     extraHTTPHeaders: { 'content-type': 'application/json' },
   },
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
+    // PW_PORT lets a sibling worktree's dev server keep using 3000 while this
+    // one runs on a different port (e.g. 3001) without colliding.
+    command: process.env.PW_PORT ? `next dev -p ${process.env.PW_PORT}` : 'npm run dev',
+    url: process.env.PW_BASE_URL ?? 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120_000,
   },

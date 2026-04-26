@@ -132,6 +132,38 @@ export default function LoginPage() {
     router.refresh();
   };
 
+  // Same dev user as /api/dev/login but reset back to pre-onboarded so the
+  // /onboarding flow can be exercised end-to-end. After this fires, the user
+  // lands on /onboarding step 1 (rate slider).
+  const devLoginOnboarding = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    await supabase.auth.signOut();
+    const res = await fetch('/api/dev/login-onboarding', { method: 'POST' });
+    if (!res.ok) {
+      const { error: msg } = await res
+        .json()
+        .catch(() => ({ error: 'dev_login_onboarding_failed' }));
+      setError(msg ?? 'dev_login_onboarding_failed');
+      setBusy(false);
+      return;
+    }
+    const { email: devEmail, password: devPassword, redirect: target } =
+      await res.json();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: devEmail,
+      password: devPassword,
+    });
+    setBusy(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    router.push(target ?? '/onboarding');
+    router.refresh();
+  };
+
   const onBack =
     stage === 'entry'
       ? undefined
@@ -172,7 +204,15 @@ export default function LoginPage() {
                 data-testid="dev-login"
                 className="w-full bg-accent text-white py-4 rounded-full font-semibold disabled:opacity-50 text-base mb-3"
               >
-                {busy ? 'logging in…' : '🛠  dev login — tap to test'}
+                {busy ? 'logging in…' : '🛠  dev login — skip to /home'}
+              </button>
+              <button
+                onClick={devLoginOnboarding}
+                disabled={busy}
+                data-testid="dev-login-onboarding"
+                className="w-full border border-accent text-accent py-4 rounded-full font-semibold disabled:opacity-50 text-base mb-3"
+              >
+                {busy ? 'resetting…' : '🧪  dev login — fresh /onboarding'}
               </button>
               <div className="flex items-center gap-3 text-xs text-ink-mute mb-3">
                 <div className="h-px bg-line flex-1" />
