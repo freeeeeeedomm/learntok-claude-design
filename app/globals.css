@@ -799,3 +799,114 @@ html, body {
   font-family: var(--sans);
   letter-spacing: 0;
 }
+
+/* Generic overlay + centered card used by destructive-action confirm modals. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 24px;
+}
+.modal-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  max-width: 360px;
+  width: 100%;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+.modal-actions .btn {
+  min-width: 96px;
+}
+
+/* Topic rail edit ⋯ button + popover. The base .rail-title rule already
+   exists (display: flex; align-items: baseline; justify-content: space-between).
+   We only add `position: relative` so the popover anchors against the title. */
+.rail-title { position: relative; }
+.rail-edit-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-mute);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+.rail-edit-btn:hover {
+  background: var(--bg-2);
+  color: var(--ink);
+}
+.rail-edit-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  z-index: 20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  min-width: 160px;
+}
+.rail-edit-popover button,
+.rail-edit-popover a {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.rail-edit-popover button:hover,
+.rail-edit-popover a:hover {
+  background: var(--bg-2);
+}
+.rail-edit-popover button.danger {
+  color: var(--bad);
+}
+
+/* Per-card × button on rail cards. The base .rail-card already exists; we
+   only add `position: relative` so the × button can absolute-position inside. */
+.rail-card { position: relative; }
+.rail-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rail-x:hover {
+  background: rgba(0, 0, 0, 0.75);
+}

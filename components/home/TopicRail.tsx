@@ -3,6 +3,7 @@
 // /course/{id}. Pure presentational — all data is grouped server-side in
 // app/home/page.tsx and passed in as props.
 import Link from 'next/link';
+import { TopicRailEdit } from './TopicRailEdit';
 
 type LessonLite = {
   id: string;
@@ -48,6 +49,7 @@ export function TopicRail({ topic, courses, lessonsByCourse }: Props) {
           {courses.length} {courses.length === 1 ? 'course' : 'courses'}
           {totalLessons > 0 ? ` · ${doneLessons}/${totalLessons} done` : ''}
         </span>
+        <TopicRailEdit topicId={topic.id} topicTitle={topic.title} />
       </div>
 
       {courses.length === 0 ? (
