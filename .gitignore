@@ -19,3 +19,7 @@ data/scrape-debug-*.png
 
 # Per-playlist Khan import cache (regenerable; would bloat the repo)
 docs/research/.khan-cache/
+
+# One-off remote-seed loader artifacts (chunked from migration 0011)
+scripts/lessons-chunks/
+scripts/apply-lessons-remote.mjs
