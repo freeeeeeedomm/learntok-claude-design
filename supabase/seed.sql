@@ -1,36 +1,55 @@
--- seed.sql — preset topics, courses, and lessons from Khan Academy.
+-- seed.sql — preset topic groups, topics, courses, and lessons from Khan Academy.
 -- Re-runnable: fixed UUIDs + ON CONFLICT guards make this idempotent.
 
--- ===== Topics (5 preset) =====
-insert into public.topics (id, owner_id, is_preset, title, icon, color, position) values
-  ('10000000-0000-0000-0000-000000000001', null, true, 'Physics',     '🧲', '#5e6ad2', 0),
-  ('10000000-0000-0000-0000-000000000002', null, true, 'Biology',     '🧬', '#10b981', 1),
-  ('10000000-0000-0000-0000-000000000003', null, true, 'Economics',   '💰', '#f4c874', 2),
-  ('10000000-0000-0000-0000-000000000004', null, true, 'Math',        '📐', '#d96f3d', 3),
-  ('10000000-0000-0000-0000-000000000005', null, true, 'Programming', '💻', '#4c56c4', 4)
+-- ===== Topic groups (5 preset super-categories) =====
+-- Order: finance → humanities → stem → math → cs (per brainstorming decision).
+insert into public.topic_groups (id, owner_id, is_preset, key, title, position, icon) values
+  ('00000000-0000-0000-0000-0000000000a1', null, true, 'finance',    '经济金融', 0, '💰'),
+  ('00000000-0000-0000-0000-0000000000a2', null, true, 'humanities', '人文历史', 1, '📜'),
+  ('00000000-0000-0000-0000-0000000000a3', null, true, 'stem',       '理工',     2, '🔬'),
+  ('00000000-0000-0000-0000-0000000000a4', null, true, 'math',       '数学',     3, '∑'),
+  ('00000000-0000-0000-0000-0000000000a5', null, true, 'cs',         '编程',     4, '💻')
+on conflict (id) do update set
+  key = excluded.key,
+  title = excluded.title,
+  position = excluded.position,
+  icon = excluded.icon;
+
+-- ===== Topics (5 preset, mapped to groups) =====
+-- Transitional mapping: existing 5 topics each pin to the most-natural group
+-- so things keep working after migration 0009. PR2 will replace these with
+-- 24 Khan-imported topics under the same 5 groups.
+insert into public.topics (id, owner_id, is_preset, title, icon, color, position, group_id) values
+  ('10000000-0000-0000-0000-000000000001', null, true, 'Physics',     '🧲', '#5e6ad2', 0, '00000000-0000-0000-0000-0000000000a3'),
+  ('10000000-0000-0000-0000-000000000002', null, true, 'Biology',     '🧬', '#10b981', 1, '00000000-0000-0000-0000-0000000000a3'),
+  ('10000000-0000-0000-0000-000000000003', null, true, 'Economics',   '💰', '#f4c874', 2, '00000000-0000-0000-0000-0000000000a1'),
+  ('10000000-0000-0000-0000-000000000004', null, true, 'Math',        '📐', '#d96f3d', 3, '00000000-0000-0000-0000-0000000000a4'),
+  ('10000000-0000-0000-0000-000000000005', null, true, 'Programming', '💻', '#4c56c4', 4, '00000000-0000-0000-0000-0000000000a5')
 on conflict (id) do update set
   title = excluded.title,
   icon = excluded.icon,
   color = excluded.color,
-  position = excluded.position;
+  position = excluded.position,
+  group_id = excluded.group_id;
 
 -- ===== Courses (10 preset, 2 per topic) =====
-insert into public.courses (id, owner_id, is_preset, title, topic, topic_id, icon, position) values
+-- Note: legacy `topic` text column dropped in 0009. Only `topic_id` is used.
+insert into public.courses (id, owner_id, is_preset, title, topic_id, icon, position) values
   -- Physics
-  ('20000000-0000-0000-0000-000000000011', null, true, 'Forces & Newton''s Laws', 'physics',     '10000000-0000-0000-0000-000000000001', '🧲', 0),
-  ('20000000-0000-0000-0000-000000000012', null, true, 'Motion & Energy',         'physics',     '10000000-0000-0000-0000-000000000001', '🚀', 1),
+  ('20000000-0000-0000-0000-000000000011', null, true, 'Forces & Newton''s Laws', '10000000-0000-0000-0000-000000000001', '🧲', 0),
+  ('20000000-0000-0000-0000-000000000012', null, true, 'Motion & Energy',         '10000000-0000-0000-0000-000000000001', '🚀', 1),
   -- Biology
-  ('20000000-0000-0000-0000-000000000021', null, true, 'Cell Structure',          'biology',     '10000000-0000-0000-0000-000000000002', '🧬', 0),
-  ('20000000-0000-0000-0000-000000000022', null, true, 'Cell Organelles',         'biology',     '10000000-0000-0000-0000-000000000002', '🔬', 1),
+  ('20000000-0000-0000-0000-000000000021', null, true, 'Cell Structure',          '10000000-0000-0000-0000-000000000002', '🧬', 0),
+  ('20000000-0000-0000-0000-000000000022', null, true, 'Cell Organelles',         '10000000-0000-0000-0000-000000000002', '🔬', 1),
   -- Economics
-  ('20000000-0000-0000-0000-000000000031', null, true, 'Intro to Economics',      'economics',   '10000000-0000-0000-0000-000000000003', '💰', 0),
-  ('20000000-0000-0000-0000-000000000032', null, true, 'Supply & Demand',         'economics',   '10000000-0000-0000-0000-000000000003', '📈', 1),
+  ('20000000-0000-0000-0000-000000000031', null, true, 'Intro to Economics',      '10000000-0000-0000-0000-000000000003', '💰', 0),
+  ('20000000-0000-0000-0000-000000000032', null, true, 'Supply & Demand',         '10000000-0000-0000-0000-000000000003', '📈', 1),
   -- Math
-  ('20000000-0000-0000-0000-000000000041', null, true, 'Intro to Limits',         'math',        '10000000-0000-0000-0000-000000000004', '∞', 0),
-  ('20000000-0000-0000-0000-000000000042', null, true, 'Algebra Basics',          'math',        '10000000-0000-0000-0000-000000000004', '🔢', 1),
+  ('20000000-0000-0000-0000-000000000041', null, true, 'Intro to Limits',         '10000000-0000-0000-0000-000000000004', '∞', 0),
+  ('20000000-0000-0000-0000-000000000042', null, true, 'Algebra Basics',          '10000000-0000-0000-0000-000000000004', '🔢', 1),
   -- Programming
-  ('20000000-0000-0000-0000-000000000051', null, true, 'Intro to CS (Python)',    'programming', '10000000-0000-0000-0000-000000000005', '🐍', 0),
-  ('20000000-0000-0000-0000-000000000052', null, true, 'Algorithms',              'programming', '10000000-0000-0000-0000-000000000005', '🧮', 1)
+  ('20000000-0000-0000-0000-000000000051', null, true, 'Intro to CS (Python)',    '10000000-0000-0000-0000-000000000005', '🐍', 0),
+  ('20000000-0000-0000-0000-000000000052', null, true, 'Algorithms',              '10000000-0000-0000-0000-000000000005', '🧮', 1)
 on conflict (id) do update set
   title = excluded.title,
   topic_id = excluded.topic_id,
@@ -39,7 +58,7 @@ on conflict (id) do update set
 
 -- ===== Lessons (21 total) =====
 -- All from Khan Academy. duration_seconds=0 because oembed doesn't give duration;
--- the UI renders "—" for zero-duration lessons.
+-- the UI renders "—" for zero-duration lessons. PR2 will replace with real durations.
 
 insert into public.lessons (id, course_id, position, title, yt_id, duration_seconds) values
   -- Forces & Newton's Laws (4)
