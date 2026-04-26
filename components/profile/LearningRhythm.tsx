@@ -157,7 +157,7 @@ export function LearningRhythm({ sessions }: Props) {
                     return (
                       <div
                         key={s.id}
-                        className={`rhythm-block ${s.kind}`}
+                        className={`rhythm-block rhythm-block--${s.kind}`}
                         style={{ width: `${blockPct}%` }}
                         title={`${s.kind} · ${fmtDur(s.durationSec)} · ${new Date(
                           s.startedAt,

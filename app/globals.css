@@ -708,10 +708,13 @@ html, body {
 .rhythm-block {
   height: 100%;
 }
-.rhythm-block.learn {
+.rhythm-block--learn {
   background: var(--accent);
 }
-.rhythm-block.feed {
+.rhythm-block--feed {
+  /* IMPORTANT: do NOT use class name "feed" here — there's a global
+     .feed { position: fixed; inset: 0 } rule from the /feed page that
+     would catch this element and stretch it across the viewport. */
   background: repeating-linear-gradient(
     45deg,
     var(--ink-mute),
