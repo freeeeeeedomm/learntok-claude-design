@@ -25,7 +25,7 @@
 | File | Action | Responsibility |
 |---|---|---|
 | `components/onboarding/RestSlider.tsx` | Create | Shared widget: Learn-1h static row + Rest-variable row + slider 5-60 step 5 + mood label. Stateless presentational; parent owns `restMin`. Used by both onboarding's `<PageDeal>` and profile's `<SettingsSection>`. Exports `moodLabel(restMin)` so both call sites stay in sync. |
-| `components/onboarding/Onboarding.tsx` | Modify | Delete inline `moodLabel`, `REST_*` constants, slider markup. Replace the slider/labels portion of `<PageDeal>` with `<RestSlider restMin={restMin} onChange={onChange} />`. Keep eyebrow + headline + CTA + page wrapper. |
+| `components/onboarding/Onboarding.tsx` | Modify | Delete inline `moodLabel`, `REST_*` constants, slider markup. Replace the slider/labels portion of `<PageDeal>` with `<RestSlider restMin={restMin} onChange={onChange} />`. Keep eyebrow + headline + CTA + page wrapper. **Also fix line 256 hardcoded Chinese `学科` → `subjects`** (DB titles still Chinese; PR 3 migration 0013 will replace those). |
 | `components/home/StatsHero.tsx` | Create | Replaces `<StatsCard>`. 5-row banded layout: Balance / Streak / Earned today / Spent today / Scope cell (week/month/total) — scope toggle behavior preserved from `<StatsCard>` (popover + localStorage). |
 | `components/home/StatsCard.tsx` | Delete | Replaced by `<StatsHero>`. |
 | `components/home/ContinueRow.tsx` | Modify | Drop the inline `continue · ` prefix from `.continue-eyebrow`. Section eyebrow on home page now provides the label. |
@@ -205,6 +205,24 @@ Find the body of `PageDeal` (lines 121-184 in the post-PR1 file). Replace the en
 ```
 
 (Note: the testids `deal-rest-min`, `deal-slider`, `deal-mood` are preserved by `<RestSlider>`'s default behavior, so existing onboarding tests keep passing.)
+
+- [ ] **Step 2b: Fix hardcoded Chinese `学科` in `<PageGroups>` subtitle**
+
+In `components/onboarding/Onboarding.tsx`, find:
+
+```tsx
+                  {g.title} · {g.topicCount} 学科
+```
+
+Replace with:
+
+```tsx
+                  {g.title} · {g.topicCount} subjects
+```
+
+(DB still has Chinese group titles like `经济金融`; PR 3 migration 0013 replaces those. This fix only touches the hardcoded English-side leakage.)
+
+Also update `tests/full-flow.spec.ts` regex on line ~58 from `/·\s*(\d+)\s*学科/` to `/·\s*(\d+)\s*subjects/` so the existing assertion still passes.
 
 - [ ] **Step 3: Type-check passes**
 
