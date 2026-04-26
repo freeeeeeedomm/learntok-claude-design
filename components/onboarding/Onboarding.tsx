@@ -10,24 +10,25 @@ type GroupLite = {
 
 type Props = {
   groups: GroupLite[];
-  initialLearnMinutes: number;
+  initialRestMinutes: number;
   onFinish: (payload: { rate: number; groupKeys: string[] }) => Promise<void> | void;
 };
 
-const LEARN_MIN = 10;
-const LEARN_MAX = 60;
-const LEARN_STEP = 5;
+const REST_MIN = 5;
+const REST_MAX = 60;
+const REST_STEP = 5;
 
-function moodLabel(learnMin: number): string {
-  if (learnMin <= 10) return 'easygoing';
-  if (learnMin <= 25) return 'balanced';
-  if (learnMin <= 45) return 'focused';
-  return 'monk mode';
+function moodLabel(restMin: number): string {
+  if (restMin <= 5)  return 'monk mode';   // 5      → 12:1 learn:play
+  if (restMin <= 15) return 'focused';     // 10-15  → 6:1 to 4:1
+  if (restMin <= 30) return 'balanced';    // 20-30  → 3:1 to 2:1
+  if (restMin <= 50) return 'easygoing';   // 35-50  → ~1.7:1 to ~1.2:1
+  return 'playtime';                       // 55-60  → ~1.1:1 to 1:1
 }
 
-export function Onboarding({ groups, initialLearnMinutes, onFinish }: Props) {
+export function Onboarding({ groups, initialRestMinutes, onFinish }: Props) {
   const [step, setStep] = React.useState<0 | 1>(0);
-  const [learnMin, setLearnMin] = React.useState<number>(initialLearnMinutes);
+  const [restMin, setRestMin] = React.useState<number>(initialRestMinutes);
   // No initial pick — group selection has no legacy field to recover from.
   const [picked, setPicked] = React.useState<string[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
@@ -39,7 +40,7 @@ export function Onboarding({ groups, initialLearnMinutes, onFinish }: Props) {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await onFinish({ rate: 5 / learnMin, groupKeys: picked });
+      await onFinish({ rate: restMin / 60, groupKeys: picked });
     } catch (e) {
       // Server actions use a thrown error (digest "NEXT_REDIRECT...") to
       // navigate. Re-throw so Next.js can handle it.
@@ -91,8 +92,8 @@ export function Onboarding({ groups, initialLearnMinutes, onFinish }: Props) {
 
       {step === 0 ? (
         <PageDeal
-          learnMin={learnMin}
-          onChange={setLearnMin}
+          restMin={restMin}
+          onChange={setRestMin}
           onNext={() => setStep(1)}
         />
       ) : (
@@ -109,11 +110,11 @@ export function Onboarding({ groups, initialLearnMinutes, onFinish }: Props) {
 }
 
 function PageDeal({
-  learnMin,
+  restMin,
   onChange,
   onNext,
 }: {
-  learnMin: number;
+  restMin: number;
   onChange: (n: number) => void;
   onNext: () => void;
 }) {
@@ -124,31 +125,31 @@ function PageDeal({
       </div>
 
       <div className="display" style={{ fontSize: 28, marginTop: 12 }}>
-        Earn your guilty-free<br />scroll time by learning.
+        Earn your scroll<br />time by learning.
       </div>
 
       <div className="card mt-16 col gap-12">
         <div className="row between aic">
           <span className="body" style={{ color: 'var(--ink)' }}>Learn</span>
+          <span className="display" style={{ fontSize: 22 }}>1 hour</span>
+        </div>
+        <div className="row between aic">
+          <span className="body" style={{ color: 'var(--ink)' }}>Rest</span>
           <span
             className="display"
             style={{ fontSize: 28, color: 'var(--accent)' }}
-            data-testid="deal-learn-min"
+            data-testid="deal-rest-min"
           >
-            {learnMin} min
+            {restMin} min
           </span>
-        </div>
-        <div className="row between aic">
-          <span className="body" style={{ color: 'var(--ink)' }}>Scroll</span>
-          <span className="display" style={{ fontSize: 22 }}>5 min</span>
         </div>
 
         <input
           type="range"
-          min={LEARN_MIN}
-          max={LEARN_MAX}
-          step={LEARN_STEP}
-          value={learnMin}
+          min={REST_MIN}
+          max={REST_MAX}
+          step={REST_STEP}
+          value={restMin}
           onChange={(e) => onChange(parseInt(e.target.value, 10))}
           style={{ width: '100%', accentColor: 'var(--accent)' }}
           data-testid="deal-slider"
@@ -164,11 +165,11 @@ function PageDeal({
           }}
           data-testid="deal-mood"
         >
-          {moodLabel(learnMin)}
+          {moodLabel(restMin)}
         </div>
 
         <div className="body" style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
-          you can adjust this later.
+          you can adjust this later in profile.
         </div>
       </div>
 

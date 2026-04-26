@@ -4,13 +4,16 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 
 // Input contract:
-// - rate: 5 / learnMinutes; learnMinutes ∈ [10, 60] → rate ∈ [~0.0833, 0.5].
+// - rate: restMinutes / 60; restMinutes ∈ [5, 60] → rate ∈ [~0.0833, 1.0].
+//   The slider on the deal card lets users pick how many minutes of "rest"
+//   (feed time) they want for every hour of learning. Rate is stored as the
+//   ratio so the heartbeat RPC can multiply raw study seconds by it directly.
 //   Lower bound rounded down a hair to absorb float-arithmetic noise.
 // - groupKeys: 0–5 preset group keys. Topics + starter courses are derived
 //   server-side using the W4 rule (top-2 topics × top-3 courses per group).
 const VALID_GROUP_KEYS = ['finance', 'humanities', 'stem', 'math', 'cs'] as const;
 const Payload = z.object({
-  rate: z.number().min(0.08).max(0.5),
+  rate: z.number().min(0.08).max(1.0),
   groupKeys: z.array(z.enum(VALID_GROUP_KEYS)).max(VALID_GROUP_KEYS.length),
 });
 

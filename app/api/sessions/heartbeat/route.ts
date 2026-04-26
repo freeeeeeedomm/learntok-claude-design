@@ -55,8 +55,8 @@ export async function POST(req: Request) {
     if (rpcError || !rpcResult) {
       return NextResponse.json({ error: 'heartbeat_failed' }, { status: 500 });
     }
-    credited = signedDelta;
-    const result = rpcResult as { new_earned_or_spent: number; ended: boolean; reason: string | null };
+    const result = rpcResult as { new_earned_or_spent: number; credited: number; ended: boolean; reason: string | null };
+    credited = result.credited;
     if (result.ended) {
       ended = true;
       reason = (result.reason ?? 'budget_exhausted') as 'budget_exhausted';
