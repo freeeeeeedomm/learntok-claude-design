@@ -107,6 +107,32 @@ export function AddForm() {
         return;
       }
 
+      // Add the new course to the user's shelf so it shows on /home.
+      // (Resolves the "/add doesn't write profile_courses" deferral from
+      // PR #19.) Note: until a future PR adds an "ungrouped" rail or a
+      // topic-assignment UI, the course won't render under any rail
+      // because topic_id is null — but it IS on the shelf.
+      const { data: shelfTop } = await supabase
+        .from('profile_courses')
+        .select('position')
+        .eq('user_id', user.id)
+        .order('position', { ascending: false })
+        .limit(1);
+      const nextPos = (shelfTop?.[0]?.position ?? -1) + 1;
+
+      const { error: shelfErr } = await supabase
+        .from('profile_courses')
+        .insert({
+          user_id: user.id,
+          course_id: courseRow.id,
+          position: nextPos,
+        });
+      if (shelfErr) {
+        setError(`saved course but couldn't add to shelf: ${shelfErr.message}`);
+        setSaving(false);
+        return;
+      }
+
       router.push(`/course/${courseRow.id}`);
     } catch (e) {
       setError((e as Error).message ?? 'something went wrong');
