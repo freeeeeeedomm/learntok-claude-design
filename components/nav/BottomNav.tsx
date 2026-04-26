@@ -10,6 +10,7 @@ const HIDE_PATTERNS = [
   /^\/onboarding(\/|$)/,
   /^\/lesson\//,
   /^\/feed(\/|$)/,
+  /^\/admin(\/|$)/,
 ];
 
 const ICON_PROPS = { size: 22, strokeWidth: 1.8 } as const;
