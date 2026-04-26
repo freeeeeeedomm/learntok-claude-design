@@ -545,6 +545,43 @@ html, body {
     font-size: 12px;
     margin-bottom: 12px;
   }
+
+  /* Profile page sections — bordered cards with section eyebrow on top. */
+  .profile-section {
+    margin-top: 24px;
+  }
+  .profile-section-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 8px;
+  }
+  .profile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+  }
+  .profile-row + .profile-row {
+    border-top: 1px solid var(--line);
+  }
+  .profile-name-input {
+    font-family: var(--serif);
+    font-size: 18px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--line);
+    text-align: right;
+    color: var(--ink);
+    padding: 4px 2px;
+    width: 60%;
+    outline: none;
+  }
+  .profile-name-input:focus {
+    border-bottom-color: var(--accent);
+  }
 }
 
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
