@@ -84,4 +84,124 @@ test.describe('apply_heartbeat_delta — earn-side rate multiplication', () => {
 
     expect(balanceAfter - balanceBefore, '60s × 0.5 should credit exactly 30s').toBe(30);
   });
+
+  test('rate=1.0 → 60s learn delta credits 60s (1:1 playtime)', async ({ request }) => {
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 1.0);
+    const lessonId = await anyPresetLessonId();
+    const sessionId = await makeLearnSession(userId, lessonId);
+
+    const before = await readBalance(userId);
+    await callRpcDirect(sessionId, userId, 60, 'lesson', lessonId);
+    const after = await readBalance(userId);
+
+    expect(after - before).toBe(60);
+  });
+
+  test('rate=0.167 → 60s learn delta credits 10s (6:1 focused)', async ({ request }) => {
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 0.167);
+    const lessonId = await anyPresetLessonId();
+    const sessionId = await makeLearnSession(userId, lessonId);
+
+    const before = await readBalance(userId);
+    await callRpcDirect(sessionId, userId, 60, 'lesson', lessonId);
+    const after = await readBalance(userId);
+
+    // round(60 * 0.167) = round(10.02) = 10
+    expect(after - before).toBe(10);
+  });
+
+  test('rate=0.083 → 60s learn delta credits 5s (12:1 monk mode)', async ({ request }) => {
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 0.083);
+    const lessonId = await anyPresetLessonId();
+    const sessionId = await makeLearnSession(userId, lessonId);
+
+    const before = await readBalance(userId);
+    await callRpcDirect(sessionId, userId, 60, 'lesson', lessonId);
+    const after = await readBalance(userId);
+
+    // round(60 * 0.083) = round(4.98) = 5
+    expect(after - before).toBe(5);
+  });
+});
+
+test.describe('apply_heartbeat_delta — feed debits unaffected by rate', () => {
+  test('rate=0.5 + feed debit of -30s decrements balance by exactly 30', async ({ request }) => {
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 0.5);
+
+    // Give the user 600s so the debit doesn't underflow / trigger exhaustion.
+    const a = admin();
+    await a.from('ledger_entries').insert({ user_id: userId, delta_seconds: 600, label: 'test_seed' });
+
+    // Feed sessions need budget_seconds set.
+    const { data: session } = await a
+      .from('sessions')
+      .insert({ user_id: userId, kind: 'feed', budget_seconds: 300 })
+      .select('id')
+      .single();
+    expect(session?.id).toBeTruthy();
+
+    const before = await readBalance(userId);
+    await callRpcDirect(session!.id, userId, -30, 'feed', session!.id);
+    const after = await readBalance(userId);
+
+    // Rate=0.5 must NOT halve the debit — feed is 1:1.
+    expect(before - after).toBe(30);
+  });
+
+  test('rate=1.0 + feed debit of -45s decrements balance by exactly 45', async ({ request }) => {
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 1.0);
+    const a = admin();
+    await a.from('ledger_entries').insert({ user_id: userId, delta_seconds: 600, label: 'test_seed' });
+    const { data: session } = await a
+      .from('sessions')
+      .insert({ user_id: userId, kind: 'feed', budget_seconds: 300 })
+      .select('id')
+      .single();
+
+    const before = await readBalance(userId);
+    await callRpcDirect(session!.id, userId, -45, 'feed', session!.id);
+    const after = await readBalance(userId);
+
+    expect(before - after).toBe(45);
+  });
+});
+
+test.describe('POST /api/sessions/heartbeat — returns rate-adjusted credited', () => {
+  test('rate=0.5 + 30s gap → response credited = 10 (clamped 20 × 0.5)', async ({ request }) => {
+    // The route caps delta at MAX_CREDIT_PER_HEARTBEAT (20s). To exercise the
+    // cap path, set last_heartbeat_at to 30s ago so gapSec=30, clamped to 20,
+    // multiplied by rate=0.5 → credited=10.
+    const userId = await resetUserAndGetId(request);
+    await setRate(userId, 0.5);
+    const lessonId = await anyPresetLessonId();
+
+    const a = admin();
+    const thirtySecAgo = new Date(Date.now() - 30_000).toISOString();
+    const { data: session } = await a
+      .from('sessions')
+      .insert({
+        user_id: userId,
+        kind: 'learn',
+        lesson_id: lessonId,
+        last_heartbeat_at: thirtySecAgo,
+      })
+      .select('id')
+      .single();
+    expect(session?.id).toBeTruthy();
+
+    // Route uses cookie auth; resetUserAndGetId already set the dev cookie.
+    const res = await request.post('/api/sessions/heartbeat', {
+      data: { sessionId: session!.id, playing: true },
+    });
+    expect(res.ok(), 'heartbeat must succeed').toBeTruthy();
+    const body = await res.json();
+
+    // gapSec=30 → clamped to 20 → 20 × 0.5 = 10 credited.
+    expect(body.credited, 'route should return rate-adjusted credited value').toBe(10);
+  });
 });
