@@ -752,3 +752,50 @@ html, body {
   border-color: var(--ink);
 }
 
+
+/* Home Stats hero — 5 banded rows, label left + value right per row.
+   Replaces the older 3-column .stats-card layout. */
+.stats-hero {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative; /* anchors .stats-menu popover */
+  margin-top: 16px;
+}
+.stats-hero-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  font-family: var(--sans);
+}
+.stats-hero-row:nth-child(odd) {
+  background: var(--bg);
+}
+.stats-hero-row:nth-child(even) {
+  background: var(--bg-2);
+}
+.stats-hero-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.stats-hero-value {
+  font-family: var(--serif);
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.stats-hero-value.good { color: var(--good); }
+.stats-hero-value.bad  { color: var(--bad); }
+.stats-hero-row.toggle {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.stats-hero-row.toggle .stats-hero-label::after {
+  content: ' ▾';
+  font-family: var(--sans);
+  letter-spacing: 0;
+}

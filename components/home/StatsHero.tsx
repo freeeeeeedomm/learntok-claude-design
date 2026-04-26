@@ -1,8 +1,4 @@
 'use client';
-
-// 3-column stats card. The third column is tappable: tapping it opens a small
-// popover anchored under the card with three time-scope choices. The selected
-// scope is persisted to localStorage so the user's choice survives reloads.
 import { useEffect, useRef, useState } from 'react';
 import { fmtBank } from '@/lib/format';
 
@@ -15,7 +11,6 @@ const SCOPE_LABEL: Record<Scope, string> = {
   week: 'THIS WEEK',
   month: 'THIS MONTH',
 };
-
 const SCOPE_LONG: Record<Scope, string> = {
   total: 'All time',
   week: 'This week',
@@ -23,8 +18,10 @@ const SCOPE_LONG: Record<Scope, string> = {
 };
 
 type Props = {
+  balance: number;
   streak: number;
-  todaySeconds: number;
+  earnedToday: number;
+  spentToday: number;
   weekSeconds: number;
   monthSeconds: number;
   totalSeconds: number;
@@ -34,41 +31,36 @@ function isScope(v: unknown): v is Scope {
   return typeof v === 'string' && (SCOPES as ReadonlyArray<string>).includes(v);
 }
 
-export function StatsCard({
+export function StatsHero({
+  balance,
   streak,
-  todaySeconds,
+  earnedToday,
+  spentToday,
   weekSeconds,
   monthSeconds,
   totalSeconds,
 }: Props) {
   const [scope, setScope] = useState<Scope>('total');
   const [menuOpen, setMenuOpen] = useState(false);
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  const heroRef = useRef<HTMLDivElement | null>(null);
 
-  // Hydrate from localStorage on mount. Defensive against SSR + incognito.
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (isScope(stored)) setScope(stored);
-    } catch {
-      /* localStorage unavailable; keep default */
-    }
+    } catch {}
   }, []);
 
-  // Persist on every change.
   useEffect(() => {
     try {
       window.localStorage.setItem(STORAGE_KEY, scope);
-    } catch {
-      /* swallow */
-    }
+    } catch {}
   }, [scope]);
 
-  // Close menu on outside click.
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: PointerEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+      if (heroRef.current && !heroRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     };
@@ -76,26 +68,29 @@ export function StatsCard({
     return () => document.removeEventListener('pointerdown', handler);
   }, [menuOpen]);
 
-  const col3Seconds =
+  const scopeSeconds =
     scope === 'week' ? weekSeconds : scope === 'month' ? monthSeconds : totalSeconds;
 
-  const onPick = (next: Scope) => {
-    setScope(next);
-    setMenuOpen(false);
-  };
-
   return (
-    <div ref={cardRef} className="stats-card mt-16" data-testid="home-stats-card">
-      <div className="stats-col" data-testid="stats-col-streak">
-        <div className="stats-num">{streak}</div>
-        <div className="stats-label">🔥 STREAK</div>
+    <div ref={heroRef} className="stats-hero" data-testid="home-stats-hero">
+      <div className="stats-hero-row" data-testid="hero-balance">
+        <span className="stats-hero-label">Balance</span>
+        <span className="stats-hero-value">{fmtBank(balance)}</span>
       </div>
-      <div className="stats-col" data-testid="stats-col-today">
-        <div className="stats-num">{fmtBank(todaySeconds)}</div>
-        <div className="stats-label">TODAY</div>
+      <div className="stats-hero-row" data-testid="hero-streak">
+        <span className="stats-hero-label">Streak</span>
+        <span className="stats-hero-value">🔥 {streak}</span>
+      </div>
+      <div className="stats-hero-row" data-testid="hero-earned-today">
+        <span className="stats-hero-label">Earned today</span>
+        <span className="stats-hero-value good">+{fmtBank(earnedToday)}</span>
+      </div>
+      <div className="stats-hero-row" data-testid="hero-spent-today">
+        <span className="stats-hero-label">Spent today</span>
+        <span className="stats-hero-value bad">−{fmtBank(spentToday)}</span>
       </div>
       <div
-        className="stats-col toggle"
+        className="stats-hero-row toggle"
         role="button"
         tabIndex={0}
         aria-haspopup="menu"
@@ -105,24 +100,25 @@ export function StatsCard({
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             setMenuOpen((v) => !v);
-          } else if (e.key === 'Escape') {
-            setMenuOpen(false);
-          }
+          } else if (e.key === 'Escape') setMenuOpen(false);
         }}
-        data-testid="stats-col-scope"
+        data-testid="hero-scope"
       >
-        <div className="stats-num">{fmtBank(col3Seconds)}</div>
-        <div className="stats-label">{SCOPE_LABEL[scope]}</div>
+        <span className="stats-hero-label">{SCOPE_LABEL[scope]}</span>
+        <span className="stats-hero-value">{fmtBank(scopeSeconds)}</span>
       </div>
 
       {menuOpen && (
-        <div className="stats-menu" role="menu" data-testid="stats-menu">
+        <div className="stats-menu" role="menu" data-testid="hero-scope-menu">
           {SCOPES.map((s) => (
             <button
               key={s}
               role="menuitemradio"
               aria-checked={s === scope}
-              onClick={() => onPick(s)}
+              onClick={() => {
+                setScope(s);
+                setMenuOpen(false);
+              }}
             >
               {SCOPE_LONG[s]}
             </button>

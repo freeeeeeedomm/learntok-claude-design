@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TopicRail } from '@/components/home/TopicRail';
-import { StatsCard } from '@/components/home/StatsCard';
+import { StatsHero } from '@/components/home/StatsHero';
 import { ContinueRow } from '@/components/home/ContinueRow';
-import { fmtBank } from '@/lib/format';
 
 // UTC-day-start for "today". A user in UTC+8 will see "today" reset at 8 AM
 // local — documented limitation in the spec; acceptable v1 trade-off.
@@ -25,8 +24,11 @@ function startOfMonthUTC(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
-function sumDeltas(rows: { delta_seconds: number }[] | null): number {
-  return (rows ?? []).reduce((s, r) => s + r.delta_seconds, 0);
+function sumPositive(rows: { delta_seconds: number }[] | null): number {
+  return (rows ?? []).filter((r) => r.delta_seconds > 0).reduce((s, r) => s + r.delta_seconds, 0);
+}
+function sumNegative(rows: { delta_seconds: number }[] | null): number {
+  return (rows ?? []).filter((r) => r.delta_seconds < 0).reduce((s, r) => s + Math.abs(r.delta_seconds), 0);
 }
 
 export default async function HomePage() {
@@ -74,25 +76,21 @@ export default async function HomePage() {
       .from('ledger_entries')
       .select('delta_seconds')
       .eq('user_id', user.id)
-      .gt('delta_seconds', 0)
       .gte('created_at', todayISO),
     supabase
       .from('ledger_entries')
       .select('delta_seconds')
       .eq('user_id', user.id)
-      .gt('delta_seconds', 0)
       .gte('created_at', weekISO),
     supabase
       .from('ledger_entries')
       .select('delta_seconds')
       .eq('user_id', user.id)
-      .gt('delta_seconds', 0)
       .gte('created_at', monthISO),
     supabase
       .from('ledger_entries')
       .select('delta_seconds')
-      .eq('user_id', user.id)
-      .gt('delta_seconds', 0),
+      .eq('user_id', user.id),
   ]);
 
   const topics = topicsRes.data ?? [];
@@ -139,10 +137,11 @@ export default async function HomePage() {
     progress.filter((p) => p.completed_at).map((p) => p.lesson_id)
   );
 
-  const todaySeconds = sumDeltas(todayRes.data);
-  const weekSeconds = sumDeltas(weekRes.data);
-  const monthSeconds = sumDeltas(monthRes.data);
-  const totalSeconds = sumDeltas(totalRes.data);
+  const earnedToday = sumPositive(todayRes.data);
+  const spentToday = sumNegative(todayRes.data);
+  const weekSeconds = sumPositive(weekRes.data);
+  const monthSeconds = sumPositive(monthRes.data);
+  const totalSeconds = sumPositive(totalRes.data);
 
   // Group lessons by course.
   const lessonsByCourse = new Map<
@@ -202,35 +201,14 @@ export default async function HomePage() {
     }
   }
 
-  const weekday = new Date()
-    .toLocaleDateString('en', { weekday: 'long' })
-    .toLowerCase();
-
   return (
     <main className="app">
       <div className="pad">
-        <div className="row between aic">
-          <div>
-            <div className="eyebrow">
-              {weekday} · 🔥 {profile?.streak ?? 0}
-            </div>
-            <div className="display mt-4" style={{ fontSize: 30 }}>
-              hey, {profile?.display_name ?? 'friend'}
-            </div>
-          </div>
-          <a
-            href="/progress"
-            className="jar-chip"
-            data-testid="home-jar-chip"
-          >
-            <span className="jar-dot" />
-            {fmtBank(profile?.jar_balance_cached ?? 0)}
-          </a>
-        </div>
-
-        <StatsCard
+        <StatsHero
+          balance={profile?.jar_balance_cached ?? 0}
           streak={profile?.streak ?? 0}
-          todaySeconds={todaySeconds}
+          earnedToday={earnedToday}
+          spentToday={spentToday}
           weekSeconds={weekSeconds}
           monthSeconds={monthSeconds}
           totalSeconds={totalSeconds}
