@@ -3,13 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 import { Onboarding } from '@/components/onboarding/Onboarding';
 import { completeOnboarding } from './actions';
 
-// Map an existing profiles.rate (= 5/learnMinutes for users from this flow,
-// or anything in [0.5, 2.0] for legacy users) back to a slider position in
-// our 10–60 range. For values outside the new range we snap to the default.
-function rateToLearnMinutes(rate: number | null | undefined): number {
-  if (!rate || rate <= 0) return 20;
-  const m = Math.round(5 / rate / 5) * 5; // snap to step of 5
-  if (m < 10 || m > 60) return 20;
+// Map an existing profiles.rate (= restMinutes / 60) back to a slider
+// position in the 5–60 range. Values from the legacy formula (5 / learnMin
+// → rate ≤ 0.5) still map cleanly because the new range is a superset.
+function rateToRestMinutes(rate: number | null | undefined): number {
+  if (!rate || rate <= 0) return 30;            // default: 30 min rest = balanced
+  const m = Math.round((rate * 60) / 5) * 5;    // snap to step of 5
+  if (m < 5 || m > 60) return 30;
   return m;
 }
 
@@ -59,7 +59,7 @@ export default async function OnboardingPage() {
   return (
     <Onboarding
       groups={groups}
-      initialLearnMinutes={rateToLearnMinutes(profile?.rate)}
+      initialRestMinutes={rateToRestMinutes(profile?.rate)}
       onFinish={completeOnboarding}
     />
   );
