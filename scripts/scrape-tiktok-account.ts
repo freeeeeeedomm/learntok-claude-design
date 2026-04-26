@@ -267,27 +267,25 @@ async function main(): Promise<void> {
   // the very first item-list response.
   const interceptor = attachItemListInterceptor(ctx, handle);
 
-  // Helper: scroll a page repeatedly to trigger lazy-load API calls.
-  // Each scroll fires another item-list XHR which the interceptor
-  // catches. Stops when we have `target` candidates AND scrolling has
-  // stabilized (the API stopped returning new items — feed end).
+  // Scroll to trigger lazy-load API calls. Exits as soon as we have
+  // `target` candidates — no point pulling more, oembed verification
+  // is slow. Stagnant detection only kicks in for tiny accounts where
+  // we'd otherwise scroll forever waiting to hit target.
   const scrollUntilEnough = async (target: number, maxScrolls = 30) => {
     let lastCount = interceptor.harvest().length;
     let stagnant = 0;
     for (let i = 0; i < maxScrolls; i++) {
+      const have = interceptor.harvest().length;
+      if (have >= target) return; // got enough, stop
+      if (stagnant >= 3) return; // 3 empty scrolls in a row = feed end
       await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.5));
       await page.waitForTimeout(SCROLL_DELAY_MS);
-      const have = interceptor.harvest().length;
-      if (have === lastCount) {
-        stagnant++;
-      } else {
+      const newCount = interceptor.harvest().length;
+      if (newCount === lastCount) stagnant++;
+      else {
         stagnant = 0;
-        lastCount = have;
+        lastCount = newCount;
       }
-      // Done if we hit target AND last 2 scrolls produced nothing new
-      if (have >= target && stagnant >= 2) return;
-      // Or if we genuinely hit the end (4 consecutive empty scrolls)
-      if (stagnant >= 4) return;
     }
   };
 
