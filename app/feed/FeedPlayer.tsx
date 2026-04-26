@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { VideoEmbed } from '@/components/feed/VideoEmbed';
+import { ExhaustionModal } from '@/components/feed/ExhaustionModal';
 
 type FeedVid = {
   video_id: string;
@@ -36,8 +36,10 @@ export function FeedPlayer({
   const [submitting, setSubmitting] = useState(false);
   const [slideDirection, setSlideDirection] = useState<'none' | 'up' | 'down'>('none');
   const [overlayHidden, setOverlayHidden] = useState(false);
+  const [balance, setBalance] = useState<number>(0);
   const router = useRouter();
   const endedRef = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const lastSwipeRef = useRef(0);
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerStart = useRef<{ y: number; t: number } | null>(null);
@@ -86,11 +88,17 @@ export function FeedPlayer({
         if (cancelled || !res.ok) return;
         const body: { balance?: number; ended?: boolean } = await res.json();
         if (cancelled) return;
+        if (typeof body.balance === 'number') setBalance(body.balance);
         if (body.ended) {
           endedRef.current = true;
           setEndedBySystem(true);
           setRemain(0);
-          setTimeout(() => router.push('/home'), 1200);
+          try {
+            iframeRef.current?.contentWindow?.postMessage(
+              JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+              '*'
+            );
+          } catch {}
         }
       } catch {
         // single blip — next tick retries
@@ -227,7 +235,7 @@ export function FeedPlayer({
               disabled={submitting}
               data-testid="angel-exit"
             >
-              <span className="angel-exit-label">回去学习</span>
+              <span className="angel-exit-label">Back to learning</span>
             </button>
           </div>
         </div>
@@ -240,7 +248,7 @@ export function FeedPlayer({
       <div
         className={`feed-video ${slideDirection !== 'none' ? `feed-slide-${slideDirection}` : ''}`}
       >
-        <VideoEmbed source={vid.source} videoId={vid.video_id} fillHeight />
+        <VideoEmbed source={vid.source} videoId={vid.video_id} fillHeight iframeRef={iframeRef} />
       </div>
       {!overlayHidden && !endedBySystem && (
         <div
@@ -269,46 +277,29 @@ export function FeedPlayer({
           data-testid="angel-exit"
           aria-label="back to learning"
         >
-          <Image
-            src="/characters/angel.png"
-            alt=""
-            width={40}
-            height={40}
-            priority
-            draggable={false}
-          />
           <span className="angel-exit-label">
-            {submitting ? 'saving…' : '回去学习'}
+            {submitting ? 'saving…' : 'Back to learning'}
           </span>
         </button>
       </div>
 
       {endedBySystem && (
-        <div
-          data-testid="feed-time-up"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.88)',
-            zIndex: 50,
-            color: '#fff',
+        <ExhaustionModal
+          sessionId={sessionId}
+          balance={balance}
+          onExtend={({ newBudget, balanceAfter }) => {
+            setEndedBySystem(false);
+            endedRef.current = false;
+            setRemain(newBudget);
+            setBalance(balanceAfter);
+            try {
+              iframeRef.current?.contentWindow?.postMessage(
+                JSON.stringify({ event: 'command', func: 'playVideo', args: [] }),
+                '*'
+              );
+            } catch {}
           }}
-        >
-          <div style={{ textAlign: 'center' }}>
-            <div
-              className="display"
-              style={{ fontSize: 36, fontFamily: 'var(--serif)' }}
-            >
-              time&apos;s up.
-            </div>
-            <div className="body mt-8" style={{ color: '#d6d3cf' }}>
-              ready to refill?
-            </div>
-          </div>
-        </div>
+        />
       )}
     </div>
   );

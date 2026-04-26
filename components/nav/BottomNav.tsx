@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Home, Coffee, TrendingUp } from 'lucide-react';
+import { Home, Compass, Coffee, User } from 'lucide-react';
 
 const HIDE_PATTERNS = [
   /^\/$/,
@@ -20,22 +20,23 @@ export function BottomNav() {
   const hidden = HIDE_PATTERNS.some((r) => r.test(pathname));
   if (hidden) return null;
 
-  // Exact-match OR "prefix + /" so /addresses wouldn't accidentally match /add.
+  // Home covers /home + the user's owned things (/course, /add).
+  // Discover covers browse surfaces (/discover, /topic).
   const isHome =
     pathname === '/home' ||
-    pathname.startsWith('/topic/') ||
     pathname.startsWith('/course/') ||
     pathname === '/add' ||
-    pathname.startsWith('/add/') ||
+    pathname.startsWith('/add/');
+  const isDiscover =
     pathname === '/discover' ||
-    pathname.startsWith('/discover/');
+    pathname.startsWith('/discover/') ||
+    pathname.startsWith('/topic/');
   const isRelax =
     pathname === '/budget' ||
     pathname.startsWith('/budget/') ||
     pathname === '/feed' ||
     pathname.startsWith('/feed/');
-  const isProgress =
-    pathname === '/progress' || pathname.startsWith('/progress/');
+  const isProfile = pathname === '/profile' || pathname.startsWith('/profile/');
 
   return (
     <nav className="bottom-nav" data-testid="bottom-nav">
@@ -45,10 +46,17 @@ export function BottomNav() {
         aria-current={isHome ? 'page' : undefined}
         data-testid="nav-home"
       >
-        <span className="bottom-nav-icon" aria-hidden>
-          <Home {...ICON_PROPS} />
-        </span>
+        <span className="bottom-nav-icon" aria-hidden><Home {...ICON_PROPS} /></span>
         <span className="bottom-nav-label">home</span>
+      </a>
+      <a
+        href="/discover"
+        className={`bottom-nav-item ${isDiscover ? 'active' : ''}`}
+        aria-current={isDiscover ? 'page' : undefined}
+        data-testid="nav-discover"
+      >
+        <span className="bottom-nav-icon" aria-hidden><Compass {...ICON_PROPS} /></span>
+        <span className="bottom-nav-label">discover</span>
       </a>
       <a
         href="/budget"
@@ -56,21 +64,17 @@ export function BottomNav() {
         aria-current={isRelax ? 'page' : undefined}
         data-testid="nav-relax"
       >
-        <span className="bottom-nav-icon" aria-hidden>
-          <Coffee {...ICON_PROPS} />
-        </span>
+        <span className="bottom-nav-icon" aria-hidden><Coffee {...ICON_PROPS} /></span>
         <span className="bottom-nav-label">relax</span>
       </a>
       <a
-        href="/progress"
-        className={`bottom-nav-item ${isProgress ? 'active' : ''}`}
-        aria-current={isProgress ? 'page' : undefined}
-        data-testid="nav-progress"
+        href="/profile"
+        className={`bottom-nav-item ${isProfile ? 'active' : ''}`}
+        aria-current={isProfile ? 'page' : undefined}
+        data-testid="nav-profile"
       >
-        <span className="bottom-nav-icon" aria-hidden>
-          <TrendingUp {...ICON_PROPS} />
-        </span>
-        <span className="bottom-nav-label">progress</span>
+        <span className="bottom-nav-icon" aria-hidden><User {...ICON_PROPS} /></span>
+        <span className="bottom-nav-label">profile</span>
       </a>
     </nav>
   );
