@@ -142,6 +142,10 @@ test('full flow: dev test login → onboarding → home rails → discover → a
     await expect(page.getByTestId(`topic-rail-${tid}`)).toBeVisible();
   }
 
+  // After PR 2 redesign: home renders the StatsHero, not StatsCard.
+  await expect(page.getByTestId('home-stats-hero')).toBeVisible();
+  await expect(page.getByTestId('hero-balance')).toBeVisible();
+
   // 10. Tap the "+ browse" header link → /discover.
   await page.getByTestId('home-browse-link').click();
   await page.waitForURL('**/discover');
