@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { fmtBank } from '@/lib/format';
 import { AddCourseButton } from '@/components/discover/AddCourseButton';
+import { LucideIcon } from '@/components/discover/LucideIcon';
 
 type Params = { params: { id: string } };
 
@@ -76,7 +77,10 @@ export default async function DiscoverTopicPage({ params }: Params) {
       </div>
 
       <div className="pad pad-top" style={{ paddingTop: 80 }}>
-        <div className="eyebrow">{topic.icon ?? ''} discover</div>
+        <div className="eyebrow row" style={{ alignItems: 'center', gap: 8 }}>
+          <LucideIcon name={topic.icon} size={28} />
+          <span>discover</span>
+        </div>
         <div className="display mt-4" style={{ fontSize: 28 }}>
           {topic.title}
         </div>
