@@ -54,10 +54,10 @@ test('full flow: dev test login → onboarding → home rails → discover → a
     await expect(tile, `group chip "${g.key}" should be visible`).toBeVisible();
     await expect(tile).toContainText(g.title);
     const subtitle = page.getByTestId(`group-tile-${g.key}-subtitle`);
-    // Format is "title · N 学科"; just check the count is at least the seed minimum.
+    // Format is "title · N subjects"; just check the count is at least the seed minimum.
     const subtitleText = (await subtitle.textContent()) ?? '';
-    const m = subtitleText.match(/·\s*(\d+)\s*学科/);
-    expect(m, `subtitle "${subtitleText}" must match "·  N 学科"`).toBeTruthy();
+    const m = subtitleText.match(/·\s*(\d+)\s*subjects/);
+    expect(m, `subtitle "${subtitleText}" must match "·  N subjects"`).toBeTruthy();
     expect(parseInt(m![1], 10)).toBeGreaterThanOrEqual(g.minTopicCount);
   }
 
