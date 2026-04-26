@@ -26,7 +26,9 @@ export function BottomNav() {
     pathname.startsWith('/topic/') ||
     pathname.startsWith('/course/') ||
     pathname === '/add' ||
-    pathname.startsWith('/add/');
+    pathname.startsWith('/add/') ||
+    pathname === '/discover' ||
+    pathname.startsWith('/discover/');
   const isRelax =
     pathname === '/budget' ||
     pathname.startsWith('/budget/') ||
