@@ -676,3 +676,79 @@ html, body {
   to   { transform: translateY(100%); opacity: 0; }
 }
 
+/* Learning rhythm — one row per day, segmented blocks per session. */
+.rhythm-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.rhythm-row + .rhythm-row {
+  border-top: 1px solid var(--line);
+}
+.rhythm-day {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.rhythm-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.rhythm-block {
+  height: 100%;
+}
+.rhythm-block.learn {
+  background: var(--accent);
+}
+.rhythm-block.feed {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ink-mute),
+    var(--ink-mute) 3px,
+    var(--bg-2) 3px,
+    var(--bg-2) 6px
+  );
+}
+.rhythm-empty {
+  font-size: 12px;
+  color: var(--ink-mute);
+  font-style: italic;
+}
+.rhythm-totals {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mute);
+  text-align: right;
+  white-space: nowrap;
+}
+.rhythm-window-toggle {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.rhythm-window-toggle button {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--ink-mute);
+  cursor: pointer;
+}
+.rhythm-window-toggle button.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
