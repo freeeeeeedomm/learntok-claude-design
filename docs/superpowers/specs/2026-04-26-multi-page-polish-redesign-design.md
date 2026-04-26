@@ -27,13 +27,16 @@ Each PR is independently testable and shippable. PRs 2 and 3 touch mostly disjoi
 
 ## File structure
 
-### PR 1 — `fix/earn-ratio`
+### PR 1 — `fix/earn-ratio` (also includes onboarding UI reframe)
 
 | File | Action | Responsibility |
 |---|---|---|
-| `supabase/migrations/0012_apply_rate_to_earn.sql` | Create | Two changes in one migration: (1) `alter table profiles alter column rate type numeric(4,3)` — widens precision from 1 to 3 decimals so onboarding's `5 / learnMinutes` round-trips through the slider correctly (current `numeric(3,1)` collapses 0.083 to 0.1, 0.167 to 0.2, etc., breaking slider position fidelity). (2) Replaces `apply_heartbeat_delta` RPC: for `type='learn'` sessions, multiplies clamped `p_delta` by `profiles.rate` before crediting ledger and incrementing `sessions.earned_or_spent_seconds`. For `type='feed'` sessions, behavior unchanged. Existing rows keep their already-rounded values; no backfill recompute (would change every user's effective ratio retroactively). |
-| `tests/sql/earn-ratio.test.sql` | Create | pgTAP-style assertions covering the post-fix range: rate=0.5 user (= 10 min/day), 60s heartbeat → ledger gets +30s. rate=0.167 (≈30 min/day) → +10s. rate=0.083 (≈60 min/day) → +5s. Feed debit unchanged regardless of rate. |
-| `tests/full-flow.spec.ts` | Modify | Add a sub-section that picks 10 min/day on the onboarding slider (formula `rate = 5/10 = 0.5` stored), then mocks a learn session heartbeat with `delta=60` and asserts jar balance increased by exactly 30 (not 60). Then a second sub-section: 30 min/day (rate=0.167) → expect +10s for `delta=60`. |
+| `supabase/migrations/0012_apply_rate_to_earn.sql` | Create | Two changes in one migration: (1) `alter table profiles alter column rate type numeric(4,3)` — widens precision so 3-decimal rate values like 0.083, 0.167, 0.333 round-trip exactly (current `numeric(3,1)` collapses 0.083 → 0.1, 0.167 → 0.2, breaking slider fidelity). (2) Replaces `apply_heartbeat_delta` RPC: for `type='learn'` sessions, multiplies clamped `p_delta` by `profiles.rate` before crediting ledger and incrementing `sessions.earned_or_spent_seconds`. For `type='feed'` sessions, behavior unchanged. Existing rows preserve their values (no backfill — old range `[0.083, 0.5]` is a subset of new range `[0.083, 1.0]`). |
+| `app/onboarding/actions.ts` | Modify | Update `Payload` validator: `rate: z.number().min(0.08).max(1.0)` (was `.max(0.5)`). The 0.08 lower bound absorbs float noise around 0.083. Update comment block to describe new formula `rate = restMinutes / 60` and new range `[0.083, 1.0]`. |
+| `components/onboarding/Onboarding.tsx` | Modify | Flip the deal-card framing from "Learn variable + Scroll fixed 5" to "Learn fixed 1h + Rest variable". Replace `LEARN_MIN/MAX/STEP` constants with `REST_MIN=5, REST_MAX=60, REST_STEP=5`. Rename `learnMin` state and `initialLearnMinutes` prop to `restMin` / `initialRestMinutes`. Update `submit`: `rate: restMin / 60` (was `5 / learnMin`). Update card UI: row 1 = `Learn  1 hour` (static), row 2 = `Rest  {restMin} min` (dynamic, `data-testid="deal-rest-min"`). Slider testid `deal-slider` stays; min=5, max=60, step=5. Update `moodLabel` per § 1.1 (new polarity, takes `restMin`). Update headline: drop "guilty-free" → `Earn your scroll time by learning.` |
+| `app/onboarding/page.tsx` | Modify | Compute `initialRestMinutes` from existing `profile.rate` if user re-visits onboarding: `Math.max(5, Math.min(60, Math.round((profile?.rate ?? 0.5) * 60 / 5) * 5))`. Default for new users: 30 (balanced). Pass as `initialRestMinutes` prop to `<Onboarding>`. |
+| `tests/sql/earn-ratio.test.sql` | Create | pgTAP-style assertions covering the post-fix range: rate=1.0 → 60s heartbeat credits 60s (1:1 playtime); rate=0.5 → +30s (2:1 balanced); rate=0.167 → +10s (6:1 focused); rate=0.083 → +5s (12:1 monk mode). Feed debit unchanged regardless of rate. |
+| `tests/full-flow.spec.ts` | Modify | Update existing onboarding step. Old: `deal-learn-min` shows "20 min", drag slider to "30", expect mood "focused". New: `deal-rest-min` shows initial value (default "30 min"), drag `deal-slider` to value 30, assert `deal-rest-min` text "30 min" and `deal-mood` "balanced". Add NEW assertion at end of full flow: trigger one learn-session heartbeat (`POST /api/sessions/heartbeat` with `delta=60`), assert `profile.jar_balance_cached` increased by exactly 30 (= 60 × 0.5). |
 
 ### PR 2 — `feat/home-profile-redesign`
 
@@ -50,8 +53,8 @@ Each PR is independently testable and shippable. PRs 2 and 3 touch mostly disjoi
 | `components/home/DeleteCourseConfirm.tsx` | Create | Modal: "Remove [course name]? You've completed {M} lessons. This deletes the course and your progress." |
 | `app/home/actions.ts` | Create | Server actions: `removeTopic(topicId)`, `confirmRemoveTopic(topicId)`, `removeCourse(courseId)`, `confirmRemoveCourse(courseId)`. See "Server actions" section below. |
 | `app/profile/page.tsx` | Create | New route. Renders `<SettingsSection>`, `<LearningRhythm>`, `<RecentActivity>`, `<SignOutButton>`. Reads `profile`, `sessions` (last 7 or 30 days), `ledger_entries` (last 30) on the server. |
-| `app/profile/actions.ts` | Create | Server actions: `updateDisplayName(name)`, `updateRate(rate)`. RLS scopes to caller's row. |
-| `components/profile/SettingsSection.tsx` | Create | Two rows: display name (inline-editable input, save on blur), daily learning target (slider 10-60 min step 5, mirroring onboarding; live preview "X min learn → 5 min play"; saved by computing rate = 5/X). |
+| `app/profile/actions.ts` | Create | Server actions: `updateDisplayName(name)`, `updateRestMinutes(restMin)`. RLS scopes to caller's row. |
+| `components/profile/SettingsSection.tsx` | Create | Two rows: display name (inline-editable input, save on blur), and the same Learn-1h + Rest-slider widget from onboarding (slider 5-60 step 5, mirrors `<PageDeal>` minus the "01 · the deal" eyebrow and CTA). Saves via `updateRestMinutes` action. Mood label below slider matches onboarding's. |
 | `components/profile/LearningRhythm.tsx` | Create | Per-day horizontal segmented bars (see "Learning rhythm viz" section). Window toggle: `week` (default, 7 days) / `month` (30 days). |
 | `components/profile/RecentActivity.tsx` | Create | Lifts current `ProgressView`'s ledger entries list (lines ~123-155). |
 | `components/profile/SignOutButton.tsx` | Create | Calls `supabase.auth.signOut()` then `router.push('/login')`. |
@@ -84,16 +87,39 @@ Each PR is independently testable and shippable. PRs 2 and 3 touch mostly disjoi
 
 ### § 1. Earn ratio bug fix
 
-**Bug:** `profiles.rate` (numeric, schema default 1.0) is set at onboarding via `rate = 5 / learnMinutes` where `learnMinutes ∈ [10, 60]` (see `app/onboarding/actions.ts:7-13` and `components/onboarding/Onboarding.tsx:42`). Actual range post-onboarding: `[0.083, 0.5]`. The schema default 1.0 is never reachable for an onboarded user — middleware forces unauthorized→`/login` and unauthenticated→onboarding. But `apply_heartbeat_delta` RPC (`supabase/migrations/0004_heartbeat_rpc.sql:26`) ignores `rate` entirely. Every learning second credits exactly 1 second to the jar — which over-credits all users by 2× to 12× their intended ratio.
+**Bug:** `profiles.rate` (numeric, schema default 1.0) is currently set at onboarding via `rate = 5 / learnMinutes` where `learnMinutes ∈ [10, 60]` (see `app/onboarding/actions.ts:7-13` and `components/onboarding/Onboarding.tsx:42`). But `apply_heartbeat_delta` RPC (`supabase/migrations/0004_heartbeat_rpc.sql:26`) ignores `rate` entirely. Every learning second credits exactly 1 second to the jar — which over-credits all users by 2× to 12× their intended ratio.
+
+**Onboarding framing reframed (in this PR):** Current copy anchors play at 5 min and lets the user pick learn minutes — the `5` magic number is buried in the formula, and the "more learning = less reward per minute" inversion is unintuitive. New framing flips the anchor:
+
+- Headline: "Earn your scroll time by learning." (drop "guilty-free")
+- Card row 1 (fixed anchor): `Learn   1 hour`
+- Card row 2 (variable, slider-controlled): `Rest    {restMin} min`
+- Slider range: 5–60 min, step 5 (12 discrete positions)
+- Mood label below slider (new polarity, see § 1.1 below)
+- Formula stored: **`rate = restMinutes / 60`** → range `[0.083, 1.0]`
+
+Profile/Settings page uses the same Learn-1-hour + Rest-slider framing for consistency.
 
 **Semantics decision:** rate is an **earn-only multiplier**. Schema comment "min play per min learn" stays correct. Spending side stays 1:1.
 
-- `rate = 0.5` (slider at 10 min/day): study 60s → bank 30s play
-- `rate = 0.167` (slider at 30 min/day, default): study 60s → bank 10s play
-- `rate = 0.083` (slider at 60 min/day): study 60s → bank 5s play
+- `rate = 1.0` (slider at 60 min rest): study 60s → bank 60s play (1:1 generous)
+- `rate = 0.5` (slider at 30 min rest, default): study 60s → bank 30s play (2:1 balanced)
+- `rate = 0.083` (slider at 5 min rest): study 60s → bank 5s play (12:1 strict)
 - Feed: spend N seconds → balance -N seconds (always 1:1)
 
-The product philosophy: more daily learning commitment → smaller per-minute play reward (because total daily play target is held at ~5 min). Rate < 1 is the norm; default 1.0 is a stub that should never be observed in practice. The bug is that the system currently behaves *as if* rate=1.0 for everyone.
+Existing rate values stored under the OLD onboarding formula are in `[0.083, 0.5]`, which is a **subset** of the new range `[0.083, 1.0]`. **No backfill needed** — existing users' values remain valid and continue to behave as their original choice. Only the UI and validator change.
+
+#### § 1.1 Mood label (new polarity)
+
+```ts
+function moodLabel(restMin: number): string {
+  if (restMin <= 5)  return 'monk mode';     // 5  → 12:1
+  if (restMin <= 15) return 'focused';       // 10-15 → 6:1 to 4:1
+  if (restMin <= 30) return 'balanced';      // 20-30 → 3:1 to 2:1
+  if (restMin <= 50) return 'easygoing';     // 35-50 → 1.7:1 to 1.2:1
+  return 'playtime';                         // 55-60 → 1.1:1 to 1:1
+}
+```
 
 **Implementation:** Move rate lookup into the RPC (single source of truth, atomic with the credit). Pseudocode:
 
@@ -215,8 +241,11 @@ Notes:
 ├─────────────────────────────────────┤
 │  Settings                           │
 │   Display name   [luyin.hu       ]  │  ← inline editable
-│   Daily learning target [────●──]   │  ← slider 10-60 min/day
-│                  10 min learn → 5 min play
+│                                     │
+│   Learn   1 hour                    │  ← static anchor (mirrors onboarding)
+│   Rest    30 min                    │  ← live, controlled by slider
+│   [────●────]                       │  ← slider 5-60 step 5
+│   balanced                          │  ← mood label
 ├─────────────────────────────────────┤
 │  Learning rhythm        [week ▼]    │
 │                                     │
@@ -235,14 +264,14 @@ Notes:
 └─────────────────────────────────────┘
 ```
 
-**Daily target slider behavior** (mirrors onboarding's slider for consistency):
-- Slider labeled `Daily learning target`, range 10-60 min, step 5 min
-- Internal value = `learnMinutes`; on save, server computes `rate = 5 / learnMinutes`
-- Reuse `components/onboarding/Onboarding.tsx`'s slider component if extractable; otherwise build a small standalone `<DailyTargetSlider>` with the same shape
-- Live preview text below: `{learnMinutes} min learn → 5 min play` (uses fixed "5 min" target as the human-readable anchor; matches onboarding's mental model)
+**Rest slider behavior** (mirrors onboarding's `<PageDeal>` for consistency):
+- Card shows static `Learn  1 hour` anchor + dynamic `Rest  {restMin} min` row + slider + mood label
+- Slider range 5-60, step 5 (12 discrete positions)
+- Internal value = `restMin`; on save, server computes `rate = restMin / 60`
+- Extract a shared `<RestSlider>` component from onboarding's `<PageDeal>` (the slider + the two info rows + mood label, sans the eyebrow / headline / CTA / page-level wrapper). Both onboarding and profile import it.
 - Save on slider release (`onPointerUp`), not every drag tick
 - After save, optimistic UI; if server rejects, revert and toast error
-- Initial value: derive from current `profile.rate` via `Math.round(5 / rate)`, clamped to [10, 60]
+- Initial value: derive from current `profile.rate` via `Math.max(5, Math.min(60, Math.round(rate * 60 / 5) * 5))`
 
 **Display name editable:**
 - Click on the name → becomes input
@@ -548,14 +577,14 @@ export async function updateDisplayName(name: string): Promise<{ ok: true } | { 
   return { ok: true };
 }
 
-export async function updateDailyTarget(learnMinutes: number): Promise<{ ok: true; rate: number } | { error: string }> {
-  if (!Number.isFinite(learnMinutes) || learnMinutes < 10 || learnMinutes > 60) {
-    return { error: 'target_out_of_range' };
+export async function updateRestMinutes(restMin: number): Promise<{ ok: true; rate: number } | { error: string }> {
+  if (!Number.isFinite(restMin) || restMin < 5 || restMin > 60) {
+    return { error: 'rest_out_of_range' };
   }
   // Snap to 5-minute step to match slider granularity.
-  const snapped = Math.round(learnMinutes / 5) * 5;
-  // Same formula as onboarding (`app/onboarding/actions.ts:7`).
-  const rate = Math.round((5 / snapped) * 1000) / 1000;  // 3-decimal precision
+  const snapped = Math.round(restMin / 5) * 5;
+  // Same formula as onboarding (post-PR1): rate = restMin / 60.
+  const rate = Math.round((snapped / 60) * 1000) / 1000;  // 3-decimal precision
   const supabase = createClient();
   const { error } = await supabase
     .from('profiles')
