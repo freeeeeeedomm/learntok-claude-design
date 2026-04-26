@@ -115,7 +115,7 @@ export default async function TopicPage({
                           backgroundSize: 'cover',
                           backgroundPosition: 'center',
                         }
-                      : { background: topic.color ?? '#5e6ad2', color: '#fff' }
+                      : { background: topic.color ?? 'var(--accent)', color: '#fff' }
                   }
                 >
                   {firstYt ? '' : c.icon ?? '📚'}
