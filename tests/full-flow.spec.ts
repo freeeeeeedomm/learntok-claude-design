@@ -25,15 +25,16 @@ test('full flow: dev test login → onboarding → home rails → discover → a
   const userId = userList.users.find((u) => u.email === DEV_EMAIL)!.id;
   expect(userId, 'dev user must exist').toBeTruthy();
 
-  // 2. Confirm we're at the rate-slider step.
+  // 2. Confirm we're at the rest-slider step.
+  // The dev login-onboarding route resets rate=1.0 → rateToRestMinutes(1) = 60.
   await page.goto('/onboarding');
   await expect(page.getByTestId('onboarding-page-deal')).toBeVisible();
-  await expect(page.getByTestId('deal-learn-min')).toHaveText('20 min');
-  await expect(page.getByTestId('deal-mood')).toHaveText('balanced');
+  await expect(page.getByTestId('deal-rest-min')).toHaveText('60 min');
+  await expect(page.getByTestId('deal-mood')).toHaveText('playtime');
 
-  // 3. Drag slider to 30 min ⇒ "focused" mood.
-  await page.getByTestId('deal-slider').fill('30');
-  await expect(page.getByTestId('deal-learn-min')).toHaveText('30 min');
+  // 3. Drag slider to 15 min rest ⇒ "focused" mood (per moodLabel thresholds).
+  await page.getByTestId('deal-slider').fill('15');
+  await expect(page.getByTestId('deal-rest-min')).toHaveText('15 min');
   await expect(page.getByTestId('deal-mood')).toHaveText('focused');
 
   // 4. Advance to the group-picker step.
@@ -106,7 +107,8 @@ test('full flow: dev test login → onboarding → home rails → discover → a
     .eq('id', userId)
     .single();
   expect(profile?.onboarded).toBe(true);
-  expect(Number(profile?.rate)).toBeCloseTo(5 / 30, 3);
+  // Slider was dragged to 15 → rate = 15 / 60 = 0.25.
+  expect(Number(profile?.rate)).toBeCloseTo(15 / 60, 3);
   expect(profile?.interests).toEqual(expectedTopicIds);
 
   // Expected shelf size = sum of min(3, courses_in_topic) over picked topics.
