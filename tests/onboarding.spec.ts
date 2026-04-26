@@ -69,11 +69,11 @@ test('onboarding: deal page → topic page → submit → home shows picked rail
   await page.getByTestId(`topic-tile-${pickB.id}`).click();
   await expect(page.getByTestId('topics-cta')).toHaveText('continue (2 picked) →');
 
-  // 6. Submit → expect /home.
-  await Promise.all([
-    page.waitForURL('**/home', { timeout: 10_000 }),
-    page.getByTestId('topics-cta').click(),
-  ]);
+  // 6. Submit → expect /home. Register the wait listener before clicking to
+  // avoid any window between click-fired-navigation and listener-attached.
+  const navHome1 = page.waitForURL('**/home', { timeout: 10_000 });
+  await page.getByTestId('topics-cta').click();
+  await navHome1;
 
   // 7. Assert DB writes.
   const a = admin();
@@ -119,10 +119,9 @@ test('onboarding: 0-pick path writes empty interests and no shelf rows', async (
   await page.getByTestId('deal-cta').click();
   await expect(page.getByTestId('topics-cta')).toHaveText('skip for now →');
 
-  await Promise.all([
-    page.waitForURL('**/home', { timeout: 10_000 }),
-    page.getByTestId('topics-cta').click(),
-  ]);
+  const navHome2 = page.waitForURL('**/home', { timeout: 10_000 });
+  await page.getByTestId('topics-cta').click();
+  await navHome2;
 
   const a = admin();
   const { data: profile } = await a
@@ -133,9 +132,12 @@ test('onboarding: 0-pick path writes empty interests and no shelf rows', async (
   expect(profile?.onboarded).toBe(true);
   expect(profile?.interests).toEqual([]);
 
-  const { count } = await a
+  // Surface RLS / network errors as distinct failures rather than letting them
+  // masquerade as a count mismatch (count stays null when the query errors).
+  const { count, error: countErr } = await a
     .from('profile_courses')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
+  expect(countErr).toBeNull();
   expect(count).toBe(0);
 });
