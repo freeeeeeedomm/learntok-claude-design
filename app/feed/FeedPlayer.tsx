@@ -308,7 +308,7 @@ export function FeedPlayer({
               className="display"
               style={{ fontSize: 36, fontFamily: 'var(--serif)' }}
             >
-              time's up.
+              time&apos;s up.
             </div>
             <div className="body mt-8" style={{ color: '#d6d3cf' }}>
               ready to refill?

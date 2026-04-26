@@ -38,19 +38,54 @@ export async function POST() {
     return NextResponse.json({ error: 'could_not_provision_user' }, { status: 500 });
   }
 
+  // The 5 preset topic UUIDs from supabase/seed.sql.
+  const PRESET_TOPIC_IDS = [
+    '10000000-0000-0000-0000-000000000001', // Physics
+    '10000000-0000-0000-0000-000000000002', // Biology
+    '10000000-0000-0000-0000-000000000003', // Economics
+    '10000000-0000-0000-0000-000000000004', // Math
+    '10000000-0000-0000-0000-000000000005', // Programming
+  ];
+
+  // The 10 preset starter course UUIDs from supabase/seed.sql (2 per topic).
+  const PRESET_STARTER_COURSE_IDS = [
+    '20000000-0000-0000-0000-000000000011', // Physics — Forces & Newton's Laws
+    '20000000-0000-0000-0000-000000000012', // Physics — Motion & Energy
+    '20000000-0000-0000-0000-000000000021', // Biology — Cell Structure
+    '20000000-0000-0000-0000-000000000022', // Biology — Cell Organelles
+    '20000000-0000-0000-0000-000000000031', // Economics — Intro to Economics
+    '20000000-0000-0000-0000-000000000032', // Economics — Supply & Demand
+    '20000000-0000-0000-0000-000000000041', // Math — Intro to Limits
+    '20000000-0000-0000-0000-000000000042', // Math — Algebra Basics
+    '20000000-0000-0000-0000-000000000051', // Programming — Intro to CS (Python)
+    '20000000-0000-0000-0000-000000000052', // Programming — Algorithms
+  ];
+
   // Reset profile to a known post-onboarded state so /home renders without
-  // a detour through /onboarding. Real users still go through onboarding.
+  // a detour through /onboarding. interests holds preset topic UUIDs (the
+  // new contract), and profile_courses is re-seeded with all preset starter
+  // courses so every preset topic rail shows 2 courses.
   await admin
     .from('profiles')
     .update({
       onboarded: true,
       display_name: 'sam',
-      interests: ['programming', 'language', 'design'],
+      interests: PRESET_TOPIC_IDS,
       rate: 1.0,
       streak: 0,
       last_study_date: null,
     })
     .eq('id', userId);
+
+  // Re-seed the dev user's shelf.
+  await admin.from('profile_courses').delete().eq('user_id', userId);
+  await admin.from('profile_courses').insert(
+    PRESET_STARTER_COURSE_IDS.map((course_id, position) => ({
+      user_id: userId,
+      course_id,
+      position,
+    })),
+  );
 
   // Wipe ledger and re-insert the welcome gift so the jar shows 5 min again.
   await admin.from('ledger_entries').delete().eq('user_id', userId);

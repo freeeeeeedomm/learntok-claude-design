@@ -38,38 +38,33 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, streak, jar_balance_cached, onboarded')
+    .select('display_name, streak, jar_balance_cached, onboarded, interests')
     .eq('id', user.id)
     .single();
 
   if (!profile?.onboarded) redirect('/onboarding');
 
+  const interestIds: string[] = profile?.interests ?? [];
   const todayISO = startOfTodayUTC().toISOString();
   const weekISO = startOfWeekUTC().toISOString();
   const monthISO = startOfMonthUTC().toISOString();
 
-  const [
-    topicsRes,
-    coursesRes,
-    lessonsRes,
-    progressRes,
-    todayRes,
-    weekRes,
-    monthRes,
-    totalRes,
-  ] = await Promise.all([
+  // Stage 1: everything that doesn't depend on the user's shelf course IDs.
+  const [topicsRes, shelfRes, progressRes, todayRes, weekRes, monthRes, totalRes] = await Promise.all([
+    interestIds.length > 0
+      ? supabase
+          .from('topics')
+          .select('id, title, icon, color, position, is_preset')
+          .in('id', interestIds)
+          .order('position', { ascending: true })
+      : Promise.resolve({ data: [] as Array<{
+          id: string; title: string; icon: string | null;
+          color: string | null; position: number; is_preset: boolean;
+        }>, error: null }),
     supabase
-      .from('topics')
-      .select('id, title, icon, color, position, is_preset')
-      .order('is_preset', { ascending: false })
-      .order('position', { ascending: true }),
-    supabase
-      .from('courses')
-      .select('id, topic_id, title, icon, position, is_preset')
-      .order('position', { ascending: true }),
-    supabase
-      .from('lessons')
-      .select('id, course_id, position, title, duration_seconds, yt_id')
+      .from('profile_courses')
+      .select('course_id, position, courses!inner(id, topic_id, title, icon, position, is_preset)')
+      .eq('user_id', user.id)
       .order('position', { ascending: true }),
     supabase
       .from('lesson_progress')
@@ -101,7 +96,43 @@ export default async function HomePage() {
   ]);
 
   const topics = topicsRes.data ?? [];
-  const courses = coursesRes.data ?? [];
+
+  // Flatten the shelf join into the shape the rest of this function expects.
+  type ShelfRow = {
+    course_id: string;
+    position: number;
+    courses: {
+      id: string;
+      topic_id: string | null;
+      title: string;
+      icon: string | null;
+      position: number;
+      is_preset: boolean;
+    };
+  };
+  const courses = ((shelfRes.data ?? []) as unknown as ShelfRow[]).map((row) => ({
+    id: row.courses.id,
+    topic_id: row.courses.topic_id,
+    title: row.courses.title,
+    icon: row.courses.icon,
+    position: row.position, // shelf-position, not course.position
+    is_preset: row.courses.is_preset,
+  }));
+
+  const shelfCourseIds = courses.map((c) => c.id);
+
+  // Stage 2: lessons — only fetched for courses on the user's shelf.
+  const lessonsRes = shelfCourseIds.length > 0
+    ? await supabase
+        .from('lessons')
+        .select('id, course_id, position, title, duration_seconds, yt_id')
+        .in('course_id', shelfCourseIds)
+        .order('position', { ascending: true })
+    : { data: [] as Array<{
+        id: string; course_id: string; position: number;
+        title: string; duration_seconds: number; yt_id: string;
+      }>, error: null };
+
   const lessons = lessonsRes.data ?? [];
   const progress = progressRes.data ?? [];
   const doneIds = new Set(
