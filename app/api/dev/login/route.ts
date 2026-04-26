@@ -9,6 +9,9 @@ import { adminClient } from '@/lib/supabase/server';
 const DEV_EMAIL = 'dev@learntok.local';
 const DEV_PASSWORD = 'devlogin-ChangeMe-2025';
 
+const TOPICS_PER_GROUP = 2;
+const COURSES_PER_TOPIC = 3;
+
 export async function POST() {
   if (process.env.NEXT_PUBLIC_DEV_PANEL !== 'true') {
     return NextResponse.json({ error: 'dev_panel_disabled' }, { status: 403 });
@@ -25,12 +28,11 @@ export async function POST() {
     const { data, error } = await admin.auth.admin.createUser({
       email: DEV_EMAIL,
       password: DEV_PASSWORD,
-      email_confirm: true, // skip email confirmation
+      email_confirm: true,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     userId = data.user?.id;
   } else {
-    // Re-set password in case it rotated; ensures login works idempotently.
     await admin.auth.admin.updateUserById(userId, { password: DEV_PASSWORD });
   }
 
@@ -38,39 +40,71 @@ export async function POST() {
     return NextResponse.json({ error: 'could_not_provision_user' }, { status: 500 });
   }
 
-  // The 5 preset topic UUIDs from supabase/seed.sql.
-  const PRESET_TOPIC_IDS = [
-    '10000000-0000-0000-0000-000000000001', // Physics
-    '10000000-0000-0000-0000-000000000002', // Biology
-    '10000000-0000-0000-0000-000000000003', // Economics
-    '10000000-0000-0000-0000-000000000004', // Math
-    '10000000-0000-0000-0000-000000000005', // Programming
-  ];
+  // Re-derive starter topics + courses using the same W4 rule as
+  // completeOnboarding: pick all 5 preset groups, take top-2 topics per group
+  // (sorted by topic position), then top-3 courses per topic. Result:
+  //   2 × 5 = 10 topic rails on home
+  //   3 × 10 = 30 starter courses on the shelf
+  const { data: groups } = await admin
+    .from('topic_groups')
+    .select('id, position')
+    .eq('is_preset', true)
+    .order('position', { ascending: true });
 
-  // The 10 preset starter course UUIDs from supabase/seed.sql (2 per topic).
-  const PRESET_STARTER_COURSE_IDS = [
-    '20000000-0000-0000-0000-000000000011', // Physics — Forces & Newton's Laws
-    '20000000-0000-0000-0000-000000000012', // Physics — Motion & Energy
-    '20000000-0000-0000-0000-000000000021', // Biology — Cell Structure
-    '20000000-0000-0000-0000-000000000022', // Biology — Cell Organelles
-    '20000000-0000-0000-0000-000000000031', // Economics — Intro to Economics
-    '20000000-0000-0000-0000-000000000032', // Economics — Supply & Demand
-    '20000000-0000-0000-0000-000000000041', // Math — Intro to Limits
-    '20000000-0000-0000-0000-000000000042', // Math — Algebra Basics
-    '20000000-0000-0000-0000-000000000051', // Programming — Intro to CS (Python)
-    '20000000-0000-0000-0000-000000000052', // Programming — Algorithms
-  ];
+  const groupIds = (groups ?? []).map((g) => g.id);
+  let pickedTopicIds: string[] = [];
+  let starterCourseIds: string[] = [];
+
+  if (groupIds.length > 0) {
+    const { data: topicsData } = await admin
+      .from('topics')
+      .select('id, group_id, position')
+      .eq('is_preset', true)
+      .in('group_id', groupIds)
+      .order('position', { ascending: true });
+
+    const topicsByGroup = new Map<string, { id: string; position: number }[]>();
+    for (const t of topicsData ?? []) {
+      if (!t.group_id) continue;
+      const arr = topicsByGroup.get(t.group_id) ?? [];
+      arr.push({ id: t.id, position: t.position });
+      topicsByGroup.set(t.group_id, arr);
+    }
+    for (const gid of groupIds) {
+      const list = topicsByGroup.get(gid) ?? [];
+      for (const t of list.slice(0, TOPICS_PER_GROUP)) pickedTopicIds.push(t.id);
+    }
+
+    if (pickedTopicIds.length > 0) {
+      const { data: coursesData } = await admin
+        .from('courses')
+        .select('id, topic_id, position')
+        .eq('is_preset', true)
+        .in('topic_id', pickedTopicIds)
+        .order('position', { ascending: true });
+
+      const coursesByTopic = new Map<string, { id: string; position: number }[]>();
+      for (const c of coursesData ?? []) {
+        if (!c.topic_id) continue;
+        const arr = coursesByTopic.get(c.topic_id) ?? [];
+        arr.push({ id: c.id, position: c.position });
+        coursesByTopic.set(c.topic_id, arr);
+      }
+      for (const tid of pickedTopicIds) {
+        const list = coursesByTopic.get(tid) ?? [];
+        for (const c of list.slice(0, COURSES_PER_TOPIC)) starterCourseIds.push(c.id);
+      }
+    }
+  }
 
   // Reset profile to a known post-onboarded state so /home renders without
-  // a detour through /onboarding. interests holds preset topic UUIDs (the
-  // new contract), and profile_courses is re-seeded with all preset starter
-  // courses so every preset topic rail shows 2 courses.
+  // a detour through /onboarding.
   await admin
     .from('profiles')
     .update({
       onboarded: true,
       display_name: 'sam',
-      interests: PRESET_TOPIC_IDS,
+      interests: pickedTopicIds,
       rate: 1.0,
       streak: 0,
       last_study_date: null,
@@ -79,13 +113,15 @@ export async function POST() {
 
   // Re-seed the dev user's shelf.
   await admin.from('profile_courses').delete().eq('user_id', userId);
-  await admin.from('profile_courses').insert(
-    PRESET_STARTER_COURSE_IDS.map((course_id, position) => ({
-      user_id: userId,
-      course_id,
-      position,
-    })),
-  );
+  if (starterCourseIds.length > 0) {
+    await admin.from('profile_courses').insert(
+      starterCourseIds.map((course_id, position) => ({
+        user_id: userId,
+        course_id,
+        position,
+      })),
+    );
+  }
 
   // Wipe ledger and re-insert the welcome gift so the jar shows 5 min again.
   await admin.from('ledger_entries').delete().eq('user_id', userId);
@@ -124,5 +160,10 @@ export async function POST() {
     return NextResponse.json({ error: signInError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ email: DEV_EMAIL, password: DEV_PASSWORD });
+  return NextResponse.json({
+    email: DEV_EMAIL,
+    password: DEV_PASSWORD,
+    seededTopics: pickedTopicIds.length,
+    seededCourses: starterCourseIds.length,
+  });
 }

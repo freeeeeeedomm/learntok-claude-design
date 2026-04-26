@@ -247,19 +247,51 @@ export default async function HomePage() {
           />
         )}
 
-        <div className="eyebrow mt-24">your topics</div>
+        <div className="row between aic mt-24">
+          <div className="eyebrow">your topics</div>
+          <a
+            href="/discover"
+            data-testid="home-browse-link"
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 11,
+              color: 'var(--accent)',
+              textDecoration: 'none',
+            }}
+          >
+            + browse
+          </a>
+        </div>
         <div className="col mt-8">
-          {topics.map((t) => (
-            <TopicRail
-              key={t.id}
-              topic={{ id: t.id, title: t.title }}
-              courses={(coursesByTopic.get(t.id) ?? []).map((c) => ({
-                id: c.id,
-                title: c.title,
-              }))}
-              lessonsByCourse={lessonsByCourse}
-            />
-          ))}
+          {topics.length === 0 ? (
+            <a
+              href="/discover"
+              className="lesson-row mt-12"
+              style={{
+                borderStyle: 'dashed',
+                justifyContent: 'center',
+                color: 'var(--accent)',
+                textDecoration: 'none',
+                gap: 8,
+              }}
+              data-testid="home-empty-cta"
+            >
+              <span style={{ fontSize: 16 }}>→</span>
+              <span>browse all topics</span>
+            </a>
+          ) : (
+            topics.map((t) => (
+              <TopicRail
+                key={t.id}
+                topic={{ id: t.id, title: t.title }}
+                courses={(coursesByTopic.get(t.id) ?? []).map((c) => ({
+                  id: c.id,
+                  title: c.title,
+                }))}
+                lessonsByCourse={lessonsByCourse}
+              />
+            ))
+          )}
           <a
             href="/add"
             className="lesson-row mt-12"

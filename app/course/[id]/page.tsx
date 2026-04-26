@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { AddCourseButton } from '@/components/discover/AddCourseButton';
 
 function fmtBank(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -17,10 +18,10 @@ export default async function CoursePage({ params }: Params) {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [courseRes, profileRes] = await Promise.all([
+  const [courseRes, profileRes, shelfRes] = await Promise.all([
     supabase
       .from('courses')
-      .select('id, title, topic, topic_id, icon')
+      .select('id, title, topic_id, icon')
       .eq('id', params.id)
       .maybeSingle(),
     supabase
@@ -28,11 +29,18 @@ export default async function CoursePage({ params }: Params) {
       .select('jar_balance_cached')
       .eq('id', user.id)
       .single(),
+    supabase
+      .from('profile_courses')
+      .select('course_id')
+      .eq('user_id', user.id)
+      .eq('course_id', params.id)
+      .maybeSingle(),
   ]);
 
   // RLS hides non-visible courses → maybeSingle returns null.
   if (!courseRes.data) redirect('/home');
   const course = courseRes.data;
+  const inShelf = !!shelfRes.data;
 
   // If this course belongs to a topic, fetch the topic metadata for the
   // breadcrumb + back-link destination.
@@ -68,7 +76,6 @@ export default async function CoursePage({ params }: Params) {
   const totalDone = lessons.filter((l) => doneIds.has(l.id)).length;
 
   // "Current" lesson: first undone lesson whose predecessors are all done.
-  // Everything else is either `done` or "future".
   let firstUndoneIdx = -1;
   for (let i = 0; i < lessons.length; i++) {
     if (!doneIds.has(lessons[i].id)) {
@@ -98,15 +105,23 @@ export default async function CoursePage({ params }: Params) {
       </div>
 
       <div className="pad pad-top" style={{ paddingTop: 80 }}>
-        {topicMeta ? (
+        {topicMeta && (
           <div className="eyebrow">
             {topicMeta.icon ?? ''} {topicMeta.title}
           </div>
-        ) : course.topic ? (
-          <div className="eyebrow">{course.topic}</div>
-        ) : null}
-        <div className="display mt-4" style={{ fontSize: 28 }}>
-          {course.title}
+        )}
+        <div
+          className="row between aic mt-4"
+          style={{ gap: 12 }}
+        >
+          <div className="display" style={{ fontSize: 28 }}>
+            {course.title}
+          </div>
+          <AddCourseButton
+            courseId={course.id}
+            initialInShelf={inShelf}
+            variant="inline"
+          />
         </div>
         <div className="body mt-4" style={{ fontSize: 12 }}>
           {lessons.length} lesson{lessons.length === 1 ? '' : 's'} · {totalDone}/
