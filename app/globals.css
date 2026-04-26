@@ -753,52 +753,72 @@ html, body {
 }
 
 
-/* Home Stats hero — 5 banded rows, label left + value right per row.
-   Replaces the older 3-column .stats-card layout. */
+/* Home Stats hero — 2-row card lifted from the old /progress summary card
+   the user liked. Top row: balance (big serif) + streak (right-aligned).
+   Bottom row: earned today | spent today (2 cols, mono label + colored value). */
 .stats-hero {
-  border: 1px solid var(--line);
+  background: var(--bg-2);
   border-radius: 18px;
-  overflow: hidden;
-  position: relative; /* anchors .stats-menu popover */
+  padding: 18px 20px;
   margin-top: 16px;
 }
-.stats-hero-row {
+.stats-hero-top {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
-  font-family: var(--sans);
+  align-items: flex-end;
+  gap: 16px;
 }
-.stats-hero-row:nth-child(odd) {
-  background: var(--bg);
+.stats-hero-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
-.stats-hero-row:nth-child(even) {
-  background: var(--bg-2);
+.stats-hero-cell.streak {
+  align-items: flex-end;
+  text-align: right;
 }
 .stats-hero-label {
   font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 10px;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--ink-mute);
 }
-.stats-hero-value {
+.stats-hero-balance-value {
   font-family: var(--serif);
-  font-size: 22px;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.02em;
   color: var(--ink);
 }
-.stats-hero-value.good { color: var(--good); }
-.stats-hero-value.bad  { color: var(--bad); }
-.stats-hero-row.toggle {
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+.stats-hero-streak-value {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink);
 }
-.stats-hero-row.toggle .stats-hero-label::after {
-  content: ' ▾';
+.stats-hero-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.stats-hero-bottom .stats-hero-cell {
+  gap: 4px;
+}
+.stats-hero-mini {
   font-family: var(--sans);
-  letter-spacing: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
 }
+.stats-hero-mini.good { color: var(--good); }
+.stats-hero-mini.bad  { color: var(--bad); }
 
 /* Generic overlay + centered card used by destructive-action confirm modals. */
 .modal-overlay {

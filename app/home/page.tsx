@@ -11,19 +11,6 @@ function startOfTodayUTC(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-// ISO week: Monday-start. JS getUTCDay returns 0=Sun..6=Sat; map to 0=Mon..6=Sun.
-function startOfWeekUTC(): Date {
-  const t = startOfTodayUTC();
-  const dayOffsetFromMonday = (t.getUTCDay() + 6) % 7;
-  t.setUTCDate(t.getUTCDate() - dayOffsetFromMonday);
-  return t;
-}
-
-function startOfMonthUTC(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
-
 function sumPositive(rows: { delta_seconds: number }[] | null): number {
   return (rows ?? []).filter((r) => r.delta_seconds > 0).reduce((s, r) => s + r.delta_seconds, 0);
 }
@@ -48,11 +35,9 @@ export default async function HomePage() {
 
   const interestIds: string[] = profile?.interests ?? [];
   const todayISO = startOfTodayUTC().toISOString();
-  const weekISO = startOfWeekUTC().toISOString();
-  const monthISO = startOfMonthUTC().toISOString();
 
   // Stage 1: everything that doesn't depend on the user's shelf course IDs.
-  const [topicsRes, shelfRes, progressRes, todayRes, weekRes, monthRes, totalRes] = await Promise.all([
+  const [topicsRes, shelfRes, progressRes, todayRes] = await Promise.all([
     interestIds.length > 0
       ? supabase
           .from('topics')
@@ -77,20 +62,6 @@ export default async function HomePage() {
       .select('delta_seconds')
       .eq('user_id', user.id)
       .gte('created_at', todayISO),
-    supabase
-      .from('ledger_entries')
-      .select('delta_seconds')
-      .eq('user_id', user.id)
-      .gte('created_at', weekISO),
-    supabase
-      .from('ledger_entries')
-      .select('delta_seconds')
-      .eq('user_id', user.id)
-      .gte('created_at', monthISO),
-    supabase
-      .from('ledger_entries')
-      .select('delta_seconds')
-      .eq('user_id', user.id),
   ]);
 
   const topics = topicsRes.data ?? [];
@@ -139,9 +110,6 @@ export default async function HomePage() {
 
   const earnedToday = sumPositive(todayRes.data);
   const spentToday = sumNegative(todayRes.data);
-  const weekSeconds = sumPositive(weekRes.data);
-  const monthSeconds = sumPositive(monthRes.data);
-  const totalSeconds = sumPositive(totalRes.data);
 
   // Group lessons by course.
   const lessonsByCourse = new Map<
@@ -209,9 +177,6 @@ export default async function HomePage() {
           streak={profile?.streak ?? 0}
           earnedToday={earnedToday}
           spentToday={spentToday}
-          weekSeconds={weekSeconds}
-          monthSeconds={monthSeconds}
-          totalSeconds={totalSeconds}
         />
 
         {continueCard && (
