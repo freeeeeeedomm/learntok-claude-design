@@ -48,7 +48,17 @@ test('bottom nav hidden on /lesson/[id]', async ({ page }) => {
   const loginRes = await page.request.post('/api/dev/login');
   expect(loginRes.ok()).toBeTruthy();
 
-  await page.goto('/lesson/30000000-0000-0000-0000-000000000111');
+  // Resolve any preset lesson at runtime (UUIDs change as the seed evolves).
+  const a = svcAdmin();
+  const { data: lesson } = await a
+    .from('lessons')
+    .select('id, courses!inner(is_preset)')
+    .eq('courses.is_preset', true)
+    .limit(1)
+    .maybeSingle();
+  expect(lesson, 'seed must contain at least one preset lesson').toBeTruthy();
+
+  await page.goto(`/lesson/${lesson!.id}`);
   await expect(page.getByTestId('mark-done')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('bottom-nav')).toHaveCount(0);
 });

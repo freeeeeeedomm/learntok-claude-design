@@ -16,3 +16,6 @@ data/playwright-profile/
 data/playwright-profile-chrome/
 data/tiktok-pool.json
 data/scrape-debug-*.png
+
+# Per-playlist Khan import cache (regenerable; would bloat the repo)
+docs/research/.khan-cache/
