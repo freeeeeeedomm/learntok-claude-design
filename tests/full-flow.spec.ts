@@ -146,7 +146,18 @@ test('full flow: dev test login → onboarding → home rails → discover → a
   await expect(page.getByTestId('home-stats-hero')).toBeVisible();
   await expect(page.getByTestId('hero-balance')).toBeVisible();
 
+  // PR 3: 4-tab bottom nav.
+  await expect(page.getByTestId('nav-home')).toBeVisible();
+  await expect(page.getByTestId('nav-discover')).toBeVisible();
+  await expect(page.getByTestId('nav-relax')).toBeVisible();
+  await expect(page.getByTestId('nav-profile')).toBeVisible();
+
+  // Click discover and verify routing.
+  await page.getByTestId('nav-discover').click();
+  await expect(page).toHaveURL(/\/discover$/);
+
   // 10. Tap the "+ browse" header link → /discover.
+  await page.goto('/home');
   await page.getByTestId('home-browse-link').click();
   await page.waitForURL('**/discover');
   // 5 group sections all render.
