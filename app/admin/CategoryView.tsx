@@ -20,6 +20,11 @@ export function CategoryView({
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [swipeMode, setSwipeMode] = useState(false);
 
+  // Multi-select (bulk hard-delete) state. Per-row delete below stays soft.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const onDelete = async (id: string) => {
     if (deletingIds.has(id)) return;
     const removed = videos.find((v) => v.id === id);
@@ -50,6 +55,62 @@ export function CategoryView({
     setVideos((vs) => [newVideo, ...vs]);
   };
 
+  const enterSelectMode = () => {
+    setSelectMode(true);
+    setSelectedIds(new Set());
+    setExpandedId(null);
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(videos.map((v) => v.id)));
+  };
+
+  const bulkDelete = async () => {
+    if (bulkDeleting || selectedIds.size === 0) return;
+    if (
+      !confirm(`要硬删 ${selectedIds.size} 条?这是不可恢复的。`)
+    ) {
+      return;
+    }
+    setBulkDeleting(true);
+    const ids = [...selectedIds];
+    const snapshot = videos;
+    setVideos((vs) => vs.filter((v) => !selectedIds.has(v.id)));
+    try {
+      const res = await fetch('/api/admin/video-pool/bulk-delete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        // restore on failure
+        setVideos(snapshot);
+        alert('批量删除失败,稍后再试');
+        return;
+      }
+      exitSelectMode();
+    } catch {
+      setVideos(snapshot);
+      alert('网络出错');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   if (swipeMode) {
     return (
       <AdminSwipeView
@@ -62,26 +123,66 @@ export function CategoryView({
   }
 
   return (
-    <div className="col gap-16 mt-16">
-      {slug && <NewVideoForm category={slug} onAdded={onAddVideo} />}
+    <div className="col gap-16 mt-16" style={{ paddingBottom: selectMode ? 80 : 0 }}>
+      {slug && !selectMode && <NewVideoForm category={slug} onAdded={onAddVideo} />}
 
       <div
         className="row"
-        style={{ justifyContent: 'space-between', alignItems: 'center' }}
+        style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
       >
         <div className="body" style={{ color: 'var(--ink-mute)', fontSize: 12 }}>
-          {categoryLabel} · {videos.length} 条
+          {selectMode
+            ? `已选 ${selectedIds.size} / ${videos.length}`
+            : `${categoryLabel} · ${videos.length} 条`}
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => setSwipeMode(true)}
-          disabled={videos.length === 0}
-          data-testid="admin-review-enter"
-          style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}
-        >
-          🎬 审一遍
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          {selectMode ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={selectAll}
+                disabled={videos.length === 0}
+                data-testid="admin-select-all"
+                style={{ fontSize: 12, padding: '6px 12px' }}
+              >
+                全选
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={exitSelectMode}
+                data-testid="admin-select-cancel"
+                style={{ fontSize: 12, padding: '6px 12px' }}
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={enterSelectMode}
+                disabled={videos.length === 0}
+                data-testid="admin-select-enter"
+                style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}
+              >
+                ☑ 选择
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setSwipeMode(true)}
+                disabled={videos.length === 0}
+                data-testid="admin-review-enter"
+                style={{ fontSize: 12, padding: '6px 12px', whiteSpace: 'nowrap' }}
+              >
+                🎬 审一遍
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {videos.length === 0 ? (
@@ -113,8 +214,50 @@ export function CategoryView({
               }
               onDelete={() => onDelete(v.id)}
               deleting={deletingIds.has(v.id)}
+              selectMode={selectMode}
+              selected={selectedIds.has(v.id)}
+              onToggleSelect={() => toggleSelect(v.id)}
             />
           ))}
+        </div>
+      )}
+
+      {selectMode && (
+        <div
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: 12,
+            background: 'var(--bg)',
+            borderTop: '1px solid var(--bg-2)',
+            display: 'flex',
+            gap: 12,
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            zIndex: 10,
+          }}
+          data-testid="admin-bulk-delete-bar"
+        >
+          <div style={{ fontSize: 13 }}>
+            已选 <strong>{selectedIds.size}</strong> 条
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={bulkDelete}
+            disabled={bulkDeleting || selectedIds.size === 0}
+            data-testid="admin-bulk-delete-submit"
+            style={{
+              fontSize: 13,
+              padding: '8px 16px',
+              background: 'var(--bad)',
+              color: '#fff',
+            }}
+          >
+            {bulkDeleting ? '正在删除...' : `🗑 删除 ${selectedIds.size} 条`}
+          </button>
         </div>
       )}
     </div>

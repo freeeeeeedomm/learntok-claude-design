@@ -298,16 +298,163 @@ html, body {
     letter-spacing: 0.02em;
   }
 
-  /* Continue hero — overflow visible so the angel can hang off the top-right. */
-  .hero-card { position: relative; overflow: visible; }
-  .hero-angel {
+  /* Stats card — 3 equal columns, two thin vertical dividers. */
+  .stats-card {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 18px 0;
+    position: relative; /* anchors the .stats-menu popover */
+  }
+  .stats-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0 8px;
+    min-width: 0;
+  }
+  .stats-col + .stats-col {
+    border-left: 1px solid var(--line);
+  }
+  .stats-num {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 32px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .stats-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .stats-col.toggle {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .stats-col.toggle .stats-label::after {
+    content: ' ▾';
+    font-family: var(--sans);
+    letter-spacing: 0;
+  }
+
+  /* Popover anchored under the stats card (right-aligned to col 3). */
+  .stats-menu {
     position: absolute;
-    right: -4px;
-    top: -58px;
-    width: 86px;
-    height: 86px;
-    background: url('/characters/angel-plush.png') no-repeat center/contain;
-    pointer-events: none;
+    top: calc(100% + 6px);
+    right: 12px;
+    min-width: 140px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  }
+  .stats-menu button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .stats-menu button:hover { background: var(--bg-2); }
+  .stats-menu button[aria-checked="true"]::before {
+    content: '✓';
+    width: 14px;
+    color: var(--ink);
+  }
+  .stats-menu button[aria-checked="false"]::before {
+    content: '';
+    width: 14px;
+  }
+
+  /* Compact continue-learning row. */
+  .continue-row {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px;
+    text-decoration: none;
+    color: inherit;
+    margin-top: 12px;
+  }
+  .continue-thumb {
+    flex: 0 0 80px;
+    height: 60px;
+    border-radius: 8px;
+    background-color: var(--bg-3);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  .continue-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+  }
+  .continue-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .continue-title {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .continue-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .continue-progress .bar {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .continue-progress .bar > i {
+    display: block;
+    height: 100%;
+    background: var(--ink);
+  }
+  .continue-row .chev {
+    flex: 0 0 auto;
+    color: var(--ink-mute);
+    align-self: center;
+    font-size: 18px;
+    padding-right: 4px;
   }
 
   /* Topic rail — Netflix-style horizontal scroll. The negative margin + padding

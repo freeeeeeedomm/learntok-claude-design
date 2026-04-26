@@ -1,12 +1,32 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { TopicRail } from '@/components/home/TopicRail';
+import { StatsCard } from '@/components/home/StatsCard';
+import { ContinueRow } from '@/components/home/ContinueRow';
+import { fmtBank } from '@/lib/format';
 
-function fmtBank(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return s ? `${m}m ${s.toString().padStart(2, '0')}s` : `${m}m`;
+// UTC-day-start for "today". A user in UTC+8 will see "today" reset at 8 AM
+// local — documented limitation in the spec; acceptable v1 trade-off.
+function startOfTodayUTC(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+// ISO week: Monday-start. JS getUTCDay returns 0=Sun..6=Sat; map to 0=Mon..6=Sun.
+function startOfWeekUTC(): Date {
+  const t = startOfTodayUTC();
+  const dayOffsetFromMonday = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - dayOffsetFromMonday);
+  return t;
+}
+
+function startOfMonthUTC(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+function sumDeltas(rows: { delta_seconds: number }[] | null): number {
+  return (rows ?? []).reduce((s, r) => s + r.delta_seconds, 0);
 }
 
 export default async function HomePage() {
@@ -25,9 +45,12 @@ export default async function HomePage() {
   if (!profile?.onboarded) redirect('/onboarding');
 
   const interestIds: string[] = profile?.interests ?? [];
+  const todayISO = startOfTodayUTC().toISOString();
+  const weekISO = startOfWeekUTC().toISOString();
+  const monthISO = startOfMonthUTC().toISOString();
 
-  // Stage 1: topics (filtered by interests) and shelf (with courses joined).
-  const [topicsRes, shelfRes] = await Promise.all([
+  // Stage 1: everything that doesn't depend on the user's shelf course IDs.
+  const [topicsRes, shelfRes, progressRes, todayRes, weekRes, monthRes, totalRes] = await Promise.all([
     interestIds.length > 0
       ? supabase
           .from('topics')
@@ -43,11 +66,38 @@ export default async function HomePage() {
       .select('course_id, position, courses!inner(id, topic_id, title, icon, position, is_preset)')
       .eq('user_id', user.id)
       .order('position', { ascending: true }),
+    supabase
+      .from('lesson_progress')
+      .select('lesson_id, completed_at')
+      .eq('user_id', user.id),
+    supabase
+      .from('ledger_entries')
+      .select('delta_seconds')
+      .eq('user_id', user.id)
+      .gt('delta_seconds', 0)
+      .gte('created_at', todayISO),
+    supabase
+      .from('ledger_entries')
+      .select('delta_seconds')
+      .eq('user_id', user.id)
+      .gt('delta_seconds', 0)
+      .gte('created_at', weekISO),
+    supabase
+      .from('ledger_entries')
+      .select('delta_seconds')
+      .eq('user_id', user.id)
+      .gt('delta_seconds', 0)
+      .gte('created_at', monthISO),
+    supabase
+      .from('ledger_entries')
+      .select('delta_seconds')
+      .eq('user_id', user.id)
+      .gt('delta_seconds', 0),
   ]);
 
   const topics = topicsRes.data ?? [];
 
-  // Flatten the shelf join into the same shape the rest of this function expects.
+  // Flatten the shelf join into the shape the rest of this function expects.
   type ShelfRow = {
     course_id: string;
     position: number;
@@ -71,29 +121,28 @@ export default async function HomePage() {
 
   const shelfCourseIds = courses.map((c) => c.id);
 
-  // Stage 2: lessons (only for shelf courses) + progress.
-  const [lessonsRes, progressRes] = await Promise.all([
-    shelfCourseIds.length > 0
-      ? supabase
-          .from('lessons')
-          .select('id, course_id, position, title, duration_seconds, yt_id')
-          .in('course_id', shelfCourseIds)
-          .order('position', { ascending: true })
-      : Promise.resolve({ data: [] as Array<{
-          id: string; course_id: string; position: number;
-          title: string; duration_seconds: number; yt_id: string;
-        }>, error: null }),
-    supabase
-      .from('lesson_progress')
-      .select('lesson_id, completed_at')
-      .eq('user_id', user.id),
-  ]);
+  // Stage 2: lessons — only fetched for courses on the user's shelf.
+  const lessonsRes = shelfCourseIds.length > 0
+    ? await supabase
+        .from('lessons')
+        .select('id, course_id, position, title, duration_seconds, yt_id')
+        .in('course_id', shelfCourseIds)
+        .order('position', { ascending: true })
+    : { data: [] as Array<{
+        id: string; course_id: string; position: number;
+        title: string; duration_seconds: number; yt_id: string;
+      }>, error: null };
 
   const lessons = lessonsRes.data ?? [];
   const progress = progressRes.data ?? [];
   const doneIds = new Set(
     progress.filter((p) => p.completed_at).map((p) => p.lesson_id)
   );
+
+  const todaySeconds = sumDeltas(todayRes.data);
+  const weekSeconds = sumDeltas(weekRes.data);
+  const monthSeconds = sumDeltas(monthRes.data);
+  const totalSeconds = sumDeltas(totalRes.data);
 
   // Group lessons by course.
   const lessonsByCourse = new Map<
@@ -122,16 +171,15 @@ export default async function HomePage() {
   }
 
   // Continue card: walk topics in order, find the first topic whose first
-  // course has an undone lesson. Deep enough: one level of topic, one course.
+  // course has an undone lesson. Same logic as before — the result feeds
+  // <ContinueRow> instead of being rendered inline.
   let continueCard: {
-    topicId: string;
     topicTitle: string;
     courseTitle: string;
-    total: number;
-    done: number;
-    nextId: string;
-    nextTitle: string;
-    nextDur: number;
+    nextLessonId: string;
+    nextLessonDurSec: number;
+    ytId: string | null;
+    donePct: number;
   } | null = null;
 
   outer: for (const t of topics) {
@@ -141,15 +189,14 @@ export default async function HomePage() {
       if (ls.length === 0) continue;
       const next = ls.find((l) => !l.done);
       if (!next) continue;
+      const done = ls.filter((l) => l.done).length;
       continueCard = {
-        topicId: t.id,
         topicTitle: t.title,
         courseTitle: c.title,
-        total: ls.length,
-        done: ls.filter((l) => l.done).length,
-        nextId: next.id,
-        nextTitle: next.title,
-        nextDur: next.duration_seconds,
+        nextLessonId: next.id,
+        nextLessonDurSec: next.duration_seconds,
+        ytId: next.yt_id || null,
+        donePct: Math.round((done / ls.length) * 100),
       };
       break outer;
     }
@@ -181,36 +228,23 @@ export default async function HomePage() {
           </a>
         </div>
 
+        <StatsCard
+          streak={profile?.streak ?? 0}
+          todaySeconds={todaySeconds}
+          weekSeconds={weekSeconds}
+          monthSeconds={monthSeconds}
+          totalSeconds={totalSeconds}
+        />
+
         {continueCard && (
-          <a
-            href={`/lesson/${continueCard.nextId}`}
-            className="card hero-card mt-16"
-            style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-            data-testid="home-continue-card"
-          >
-            <div className="hero-angel" aria-hidden />
-            <div className="eyebrow" style={{ color: 'var(--ink)', fontWeight: 600 }}>
-              continue · {continueCard.topicTitle}
-            </div>
-            <div className="display mt-4" style={{ fontSize: 22 }}>
-              {continueCard.courseTitle}
-            </div>
-            <div className="bar mt-12">
-              <i
-                style={{
-                  width: `${Math.round(
-                    (continueCard.done / continueCard.total) * 100
-                  )}%`,
-                }}
-              />
-            </div>
-            <div className="body mt-8" style={{ fontSize: 12 }}>
-              up next · {continueCard.nextTitle}
-              {continueCard.nextDur > 0
-                ? ` · ${Math.floor(continueCard.nextDur / 60)}m`
-                : ''}
-            </div>
-          </a>
+          <ContinueRow
+            topicTitle={continueCard.topicTitle}
+            courseTitle={continueCard.courseTitle}
+            nextLessonId={continueCard.nextLessonId}
+            nextLessonDurSec={continueCard.nextLessonDurSec}
+            ytId={continueCard.ytId}
+            donePct={continueCard.donePct}
+          />
         )}
 
         <div className="eyebrow mt-24">your topics</div>

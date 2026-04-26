@@ -1,6 +1,8 @@
 import { requireAdmin } from '@/lib/admin-auth';
 import { adminClient } from '@/lib/supabase/server';
 import { NewCategoryForm } from './NewCategoryForm';
+import { NewVideoFormPicker } from './NewVideoFormPicker';
+import { ScrapeAccountForm } from './ScrapeAccountForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,11 @@ export default async function AdminIndex() {
         <div className="eyebrow">🛡️ admin</div>
         <div className="display mt-4" style={{ fontSize: 26 }}>
           video pool
+        </div>
+
+        <div className="col gap-8 mt-12">
+          <NewVideoFormPicker categories={categories.map((c) => c.slug)} />
+          <ScrapeAccountForm categories={categories.map((c) => c.slug)} />
         </div>
 
         <a
