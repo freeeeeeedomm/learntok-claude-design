@@ -73,13 +73,15 @@ export function AddForm() {
       }
 
       // Insert course owned by this user.
+      // (legacy `topic` text column dropped in migration 0008; topic_id is
+      // intentionally null here — user-pasted videos don't belong to a topic
+      // until the user organizes them.)
       const { data: courseRow, error: courseErr } = await supabase
         .from('courses')
         .insert({
           owner_id: user.id,
           is_preset: false,
           title,
-          topic: parsed.channel || null,
           icon: '🎥',
         })
         .select('id')

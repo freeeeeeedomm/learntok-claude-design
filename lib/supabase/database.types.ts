@@ -64,7 +64,6 @@ export type Database = {
           owner_id: string | null
           position: number
           title: string
-          topic: string | null
           topic_id: string | null
         }
         Insert: {
@@ -75,7 +74,6 @@ export type Database = {
           owner_id?: string | null
           position?: number
           title: string
-          topic?: string | null
           topic_id?: string | null
         }
         Update: {
@@ -86,7 +84,6 @@ export type Database = {
           owner_id?: string | null
           position?: number
           title?: string
-          topic?: string | null
           topic_id?: string | null
         }
         Relationships: [
@@ -351,6 +348,7 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          group_id: string | null
           icon: string | null
           id: string
           is_preset: boolean
@@ -361,6 +359,7 @@ export type Database = {
         Insert: {
           color?: string | null
           created_at?: string
+          group_id?: string | null
           icon?: string | null
           id?: string
           is_preset?: boolean
@@ -371,6 +370,7 @@ export type Database = {
         Update: {
           color?: string | null
           created_at?: string
+          group_id?: string | null
           icon?: string | null
           id?: string
           is_preset?: boolean
@@ -381,6 +381,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "topics_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "topics_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "topic_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_groups: {
+        Row: {
+          created_at: string
+          icon: string | null
+          id: string
+          is_preset: boolean
+          key: string | null
+          owner_id: string | null
+          position: number
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_preset?: boolean
+          key?: string | null
+          owner_id?: string | null
+          position?: number
+          title: string
+        }
+        Update: {
+          created_at?: string
+          icon?: string | null
+          id?: string
+          is_preset?: boolean
+          key?: string | null
+          owner_id?: string | null
+          position?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_groups_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
