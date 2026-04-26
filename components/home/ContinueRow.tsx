@@ -37,7 +37,7 @@ export function ContinueRow({
         aria-hidden
       />
       <div className="continue-meta">
-        <div className="continue-eyebrow">continue · {topicTitle}</div>
+        <div className="continue-eyebrow">{topicTitle}</div>
         <div className="continue-title">{courseTitle}</div>
         <div className="continue-progress">
           <div className="bar">

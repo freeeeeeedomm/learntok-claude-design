@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import { RestSlider } from './RestSlider';
 
 type GroupLite = {
   key: string;
@@ -13,18 +14,6 @@ type Props = {
   initialRestMinutes: number;
   onFinish: (payload: { rate: number; groupKeys: string[] }) => Promise<void> | void;
 };
-
-const REST_MIN = 5;
-const REST_MAX = 60;
-const REST_STEP = 5;
-
-function moodLabel(restMin: number): string {
-  if (restMin <= 5)  return 'monk mode';   // 5      → 12:1 learn:play
-  if (restMin <= 15) return 'focused';     // 10-15  → 6:1 to 4:1
-  if (restMin <= 30) return 'balanced';    // 20-30  → 3:1 to 2:1
-  if (restMin <= 50) return 'easygoing';   // 35-50  → ~1.7:1 to ~1.2:1
-  return 'playtime';                       // 55-60  → ~1.1:1 to 1:1
-}
 
 export function Onboarding({ groups, initialRestMinutes, onFinish }: Props) {
   const [step, setStep] = React.useState<0 | 1>(0);
@@ -128,47 +117,9 @@ function PageDeal({
         Earn your scroll<br />time by learning.
       </div>
 
-      <div className="card mt-16 col gap-12">
-        <div className="row between aic">
-          <span className="body" style={{ color: 'var(--ink)' }}>Learn</span>
-          <span className="display" style={{ fontSize: 22 }}>1 hour</span>
-        </div>
-        <div className="row between aic">
-          <span className="body" style={{ color: 'var(--ink)' }}>Rest</span>
-          <span
-            className="display"
-            style={{ fontSize: 28, color: 'var(--accent)' }}
-            data-testid="deal-rest-min"
-          >
-            {restMin} min
-          </span>
-        </div>
-
-        <input
-          type="range"
-          min={REST_MIN}
-          max={REST_MAX}
-          step={REST_STEP}
-          value={restMin}
-          onChange={(e) => onChange(parseInt(e.target.value, 10))}
-          style={{ width: '100%', accentColor: 'var(--accent)' }}
-          data-testid="deal-slider"
-        />
-
-        <div
-          className="row"
-          style={{
-            justifyContent: 'center',
-            fontFamily: 'var(--mono)',
-            fontSize: 11,
-            color: 'var(--ink-mute)',
-          }}
-          data-testid="deal-mood"
-        >
-          {moodLabel(restMin)}
-        </div>
-
-        <div className="body" style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+      <div className="card mt-16">
+        <RestSlider restMin={restMin} onChange={onChange} />
+        <div className="body" style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 12 }}>
           you can adjust this later in profile.
         </div>
       </div>
@@ -253,7 +204,7 @@ function PageGroups({
                   }}
                   data-testid={`group-tile-${g.key}-subtitle`}
                 >
-                  {g.title} · {g.topicCount} 学科
+                  {g.title} · {g.topicCount} subjects
                 </span>
               </span>
             </button>
