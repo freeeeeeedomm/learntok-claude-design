@@ -42,22 +42,24 @@ test('full flow: dev test login → onboarding → home rails → discover → a
   await expect(page.getByTestId('onboarding-page-topics')).toBeVisible();
 
   // 5. Verify all 5 preset groups render with their subtitles.
+  // Titles are English after migration 0013_groups_english_titles.
   const expectedGroups: { key: string; title: string; minTopicCount: number }[] = [
-    { key: 'finance',    title: '经济金融', minTopicCount: 3 },
-    { key: 'humanities', title: '人文历史', minTopicCount: 4 },
-    { key: 'stem',       title: '理工',     minTopicCount: 6 },
-    { key: 'math',       title: '数学',     minTopicCount: 9 },
-    { key: 'cs',         title: '编程',     minTopicCount: 2 },
+    { key: 'finance',    title: 'Finance & Economics',   minTopicCount: 3 },
+    { key: 'humanities', title: 'Humanities & History',  minTopicCount: 4 },
+    { key: 'stem',       title: 'Science & Engineering', minTopicCount: 6 },
+    { key: 'math',       title: 'Mathematics',           minTopicCount: 9 },
+    { key: 'cs',         title: 'Computer Science',      minTopicCount: 2 },
   ];
   for (const g of expectedGroups) {
     const tile = page.getByTestId(`group-tile-${g.key}`);
     await expect(tile, `group chip "${g.key}" should be visible`).toBeVisible();
     await expect(tile).toContainText(g.title);
     const subtitle = page.getByTestId(`group-tile-${g.key}-subtitle`);
-    // Format is "title · N subjects"; just check the count is at least the seed minimum.
+    // Subtitle is just "N subjects" (title used to be repeated; dropped to
+    // de-duplicate the visual after the Lucide icon swap).
     const subtitleText = (await subtitle.textContent()) ?? '';
-    const m = subtitleText.match(/·\s*(\d+)\s*subjects/);
-    expect(m, `subtitle "${subtitleText}" must match "·  N subjects"`).toBeTruthy();
+    const m = subtitleText.match(/(\d+)\s*subjects/);
+    expect(m, `subtitle "${subtitleText}" must match "N subjects"`).toBeTruthy();
     expect(parseInt(m![1], 10)).toBeGreaterThanOrEqual(g.minTopicCount);
   }
 
