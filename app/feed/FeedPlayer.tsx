@@ -260,12 +260,6 @@ export function FeedPlayer({
         {fmtMMSS(remain)}
       </div>
 
-      <div className="feed-overlay-info">
-        <div style={{ fontSize: 13, marginTop: 4, opacity: 0.9 }}>
-          {vid.title ?? ''}
-        </div>
-      </div>
-
       <div className="angel-exit-bar">
         <button
           type="button"
