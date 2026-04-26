@@ -1,18 +1,17 @@
 'use client';
 import React from 'react';
 
-type TopicLite = {
-  id: string;
+type GroupLite = {
+  key: string;
   title: string;
   icon: string | null;
-  color: string | null;
+  topicCount: number;
 };
 
 type Props = {
-  topics: TopicLite[];
-  initialLearnMinutes: number;       // derived in page.tsx from profile.rate
-  initialTopicIds: string[];          // existing topic UUIDs in profile.interests
-  onFinish: (payload: { rate: number; topicIds: string[] }) => Promise<void> | void;
+  groups: GroupLite[];
+  initialLearnMinutes: number;
+  onFinish: (payload: { rate: number; groupKeys: string[] }) => Promise<void> | void;
 };
 
 const LEARN_MIN = 10;
@@ -26,29 +25,28 @@ function moodLabel(learnMin: number): string {
   return 'monk mode';
 }
 
-export function Onboarding({ topics, initialLearnMinutes, initialTopicIds, onFinish }: Props) {
+export function Onboarding({ groups, initialLearnMinutes, onFinish }: Props) {
   const [step, setStep] = React.useState<0 | 1>(0);
   const [learnMin, setLearnMin] = React.useState<number>(initialLearnMinutes);
-  const [picked, setPicked] = React.useState<string[]>(initialTopicIds);
+  // No initial pick — group selection has no legacy field to recover from.
+  const [picked, setPicked] = React.useState<string[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
 
-  const togglePick = (id: string) =>
-    setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
+  const togglePick = (key: string) =>
+    setPicked((xs) => (xs.includes(key) ? xs.filter((x) => x !== key) : [...xs, key]));
 
   const submit = async () => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      await onFinish({ rate: 5 / learnMin, topicIds: picked });
+      await onFinish({ rate: 5 / learnMin, groupKeys: picked });
     } catch (e) {
       // Server actions use a thrown error (digest "NEXT_REDIRECT...") to
       // navigate. Re-throw so Next.js can handle it.
       const err = e as Error & { digest?: string };
       if (err?.digest?.startsWith('NEXT_REDIRECT')) throw e;
       setSubmitting(false);
-      // Surface the failure so the user can retry. A toast system would be
-      // nicer; alert() is fine for v1 because this only fires on auth/RLS
-      // failures or network errors that the user must act on.
+      // Surface failure so the user can retry.
       alert(err.message ?? 'submit_failed');
     }
   };
@@ -98,8 +96,8 @@ export function Onboarding({ topics, initialLearnMinutes, initialTopicIds, onFin
           onNext={() => setStep(1)}
         />
       ) : (
-        <PageTopics
-          topics={topics}
+        <PageGroups
+          groups={groups}
           picked={picked}
           onToggle={togglePick}
           onSubmit={submit}
@@ -187,16 +185,16 @@ function PageDeal({
   );
 }
 
-function PageTopics({
-  topics,
+function PageGroups({
+  groups,
   picked,
   onToggle,
   onSubmit,
   submitting,
 }: {
-  topics: TopicLite[];
+  groups: GroupLite[];
   picked: string[];
-  onToggle: (id: string) => void;
+  onToggle: (key: string) => void;
   onSubmit: () => void;
   submitting: boolean;
 }) {
@@ -216,15 +214,15 @@ function PageTopics({
       </div>
 
       <div className="col gap-8 mt-16">
-        {topics.map((t) => {
-          const isOn = picked.includes(t.id);
+        {groups.map((g) => {
+          const isOn = picked.includes(g.key);
           return (
             <button
-              key={t.id}
+              key={g.key}
               type="button"
               aria-pressed={isOn}
-              onClick={() => onToggle(t.id)}
-              data-testid={`topic-tile-${t.id}`}
+              onClick={() => onToggle(g.key)}
+              data-testid={`group-tile-${g.key}`}
               data-selected={isOn ? 'true' : 'false'}
               style={{
                 display: 'flex',
@@ -241,25 +239,21 @@ function PageTopics({
                 overflow: 'hidden',
               }}
             >
-              {/* left-edge color bar — only when selected */}
-              {isOn && t.color && (
+              <span style={{ fontSize: 22 }}>{g.icon ?? '•'}</span>
+              <span className="col" style={{ gap: 2 }}>
+                <span style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>
+                  {g.title}
+                </span>
                 <span
-                  aria-hidden
                   style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: 4,
-                    background: t.color,
+                    fontFamily: 'var(--mono)',
+                    fontSize: 11,
+                    color: 'var(--ink-mute)',
                   }}
-                />
-              )}
-              <span style={{ fontSize: 20, marginLeft: isOn && t.color ? 6 : 0 }}>
-                {t.icon ?? '•'}
-              </span>
-              <span style={{ fontFamily: 'var(--serif)', fontSize: 18 }}>
-                {t.title}
+                  data-testid={`group-tile-${g.key}-subtitle`}
+                >
+                  {g.title} · {g.topicCount} 学科
+                </span>
               </span>
             </button>
           );
@@ -271,7 +265,7 @@ function PageTopics({
         style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center' }}
       >
         pick any number — none is fine too.<br />
-        you can add topics or paste a YouTube link later.
+        you can browse the full catalog later.
       </div>
 
       <div className="mt-auto">

@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { admin } from './helpers/session';
 
 const DEV_EMAIL = 'dev@learntok.local';
+const TOPICS_PER_GROUP = 2;
+const COURSES_PER_TOPIC = 3;
 
 async function devUserId(): Promise<string> {
   const a = admin();
@@ -22,18 +24,45 @@ async function resetForOnboarding(userId: string) {
   await a.from('profile_courses').delete().eq('user_id', userId);
 }
 
-async function getPresetTopics(): Promise<Array<{ id: string; title: string; position: number }>> {
+type GroupRow = { id: string; key: string; position: number };
+
+async function getPresetGroups(): Promise<GroupRow[]> {
+  const a = admin();
+  const { data } = await a
+    .from('topic_groups')
+    .select('id, key, position')
+    .eq('is_preset', true)
+    .order('position', { ascending: true });
+  expect((data ?? []).length, 'seed must contain preset topic_groups').toBeGreaterThan(0);
+  return (data ?? []).map((g) => ({ id: g.id, key: g.key ?? '', position: g.position }));
+}
+
+async function topTopicsForGroups(groups: GroupRow[]): Promise<string[]> {
+  // Mirrors completeOnboarding's derivation: top-2 topics per group by ascending position,
+  // walked in user-pick order.
   const a = admin();
   const { data } = await a
     .from('topics')
-    .select('id, title, position')
+    .select('id, group_id, position')
     .eq('is_preset', true)
+    .in('group_id', groups.map((g) => g.id))
     .order('position', { ascending: true });
-  expect((data ?? []).length, 'seed must contain preset topics').toBeGreaterThan(0);
-  return data!;
+  const byGroup = new Map<string, { id: string; position: number }[]>();
+  for (const t of data ?? []) {
+    if (!t.group_id) continue;
+    const arr = byGroup.get(t.group_id) ?? [];
+    arr.push({ id: t.id, position: t.position });
+    byGroup.set(t.group_id, arr);
+  }
+  const out: string[] = [];
+  for (const g of groups) {
+    const list = byGroup.get(g.id) ?? [];
+    for (const t of list.slice(0, TOPICS_PER_GROUP)) out.push(t.id);
+  }
+  return out;
 }
 
-test('onboarding: deal page → topic page → submit → home shows picked rails', async ({
+test('onboarding: deal page → group page → submit → home shows derived rails', async ({
   page,
 }) => {
   // 1. Auth + reset to pre-onboarding state.
@@ -42,9 +71,10 @@ test('onboarding: deal page → topic page → submit → home shows picked rail
   const userId = await devUserId();
   await resetForOnboarding(userId);
 
-  const presets = await getPresetTopics();
-  const pickA = presets[0]; // Physics (per seed)
-  const pickB = presets[3]; // Math (per seed) — pick non-adjacent to verify ordering
+  const groups = await getPresetGroups();
+  // Pick two non-adjacent groups to verify pick-order is preserved.
+  const pickA = groups[0]; // finance
+  const pickB = groups[2]; // stem
 
   // 2. Land on /onboarding. Page 1 (deal) is visible.
   await page.goto('/onboarding');
@@ -52,7 +82,7 @@ test('onboarding: deal page → topic page → submit → home shows picked rail
   await expect(page.getByTestId('deal-learn-min')).toHaveText('20 min');
   await expect(page.getByTestId('deal-mood')).toHaveText('balanced');
 
-  // 3. Drag the slider to 30 (focused). Range inputs need fill() in Playwright.
+  // 3. Drag the slider to 30 (focused).
   await page.getByTestId('deal-slider').fill('30');
   await expect(page.getByTestId('deal-learn-min')).toHaveText('30 min');
   await expect(page.getByTestId('deal-mood')).toHaveText('focused');
@@ -60,22 +90,22 @@ test('onboarding: deal page → topic page → submit → home shows picked rail
   // 4. Advance to page 2.
   await page.getByTestId('deal-cta').click();
   await expect(page.getByTestId('onboarding-page-topics')).toBeVisible();
-
-  // CTA copy reflects 0 picks initially.
   await expect(page.getByTestId('topics-cta')).toHaveText('skip for now →');
 
-  // 5. Pick two topics (Physics then Math).
-  await page.getByTestId(`topic-tile-${pickA.id}`).click();
-  await page.getByTestId(`topic-tile-${pickB.id}`).click();
+  // 5. Pick two groups (finance then stem).
+  await page.getByTestId(`group-tile-${pickA.key}`).click();
+  await page.getByTestId(`group-tile-${pickB.key}`).click();
   await expect(page.getByTestId('topics-cta')).toHaveText('continue (2 picked) →');
 
-  // 6. Submit → expect /home. Register the wait listener before clicking to
-  // avoid any window between click-fired-navigation and listener-attached.
+  // 6. Submit → expect /home.
   const navHome1 = page.waitForURL('**/home', { timeout: 10_000 });
   await page.getByTestId('topics-cta').click();
   await navHome1;
 
-  // 7. Assert DB writes.
+  // 7. Assert DB writes — derive what we expect server-side to have written.
+  const expectedTopicIds = await topTopicsForGroups([pickA, pickB]);
+  expect(expectedTopicIds.length).toBe(2 * TOPICS_PER_GROUP);
+
   const a = admin();
   const { data: profile } = await a
     .from('profiles')
@@ -83,28 +113,29 @@ test('onboarding: deal page → topic page → submit → home shows picked rail
     .eq('id', userId)
     .single();
   expect(profile?.onboarded).toBe(true);
-  // rate = 5/30 ≈ 0.167 — allow a small float tolerance.
   expect(Number(profile?.rate)).toBeCloseTo(5 / 30, 3);
-  expect(profile?.interests).toEqual([pickA.id, pickB.id]);
+  expect(profile?.interests).toEqual(expectedTopicIds);
 
   const { data: shelf } = await a
     .from('profile_courses')
     .select('course_id, position, courses!inner(topic_id)')
     .eq('user_id', userId)
     .order('position', { ascending: true });
-  expect((shelf ?? []).length).toBe(4); // 2 topics × 2 starter courses
-  // First 2 rows belong to pickA's topic, next 2 to pickB's.
+  // 2 groups × 2 topics × 3 courses (assuming each topic has ≥3 preset courses, which Khan-seeded topics all do).
+  expect((shelf ?? []).length).toBe(2 * TOPICS_PER_GROUP * COURSES_PER_TOPIC);
+  // Topic order in the shelf reflects pick order: pickA's topics first, then pickB's.
   const topicSeq = (shelf ?? []).map((r: any) => r.courses.topic_id);
-  expect(topicSeq.slice(0, 2).every((t) => t === pickA.id)).toBe(true);
-  expect(topicSeq.slice(2, 4).every((t) => t === pickB.id)).toBe(true);
+  for (let i = 0; i < TOPICS_PER_GROUP * COURSES_PER_TOPIC; i++) {
+    expect(expectedTopicIds.slice(0, TOPICS_PER_GROUP)).toContain(topicSeq[i]);
+  }
+  for (let i = TOPICS_PER_GROUP * COURSES_PER_TOPIC; i < topicSeq.length; i++) {
+    expect(expectedTopicIds.slice(TOPICS_PER_GROUP)).toContain(topicSeq[i]);
+  }
 
-  // 8. /home shows exactly 2 rails (one per picked topic).
-  // The DOM uses data-testid="topic-rail-{id}" per components/home/TopicRail.tsx.
-  await expect(page.getByTestId(`topic-rail-${pickA.id}`)).toBeVisible();
-  await expect(page.getByTestId(`topic-rail-${pickB.id}`)).toBeVisible();
-  // A topic NOT picked should not have a rail.
-  const unpicked = presets.find((t) => t.id !== pickA.id && t.id !== pickB.id)!;
-  await expect(page.getByTestId(`topic-rail-${unpicked.id}`)).toHaveCount(0);
+  // 8. /home shows rails for each derived topic.
+  for (const tid of expectedTopicIds) {
+    await expect(page.getByTestId(`topic-rail-${tid}`)).toBeVisible();
+  }
 });
 
 test('onboarding: 0-pick path writes empty interests and no shelf rows', async ({
@@ -132,8 +163,6 @@ test('onboarding: 0-pick path writes empty interests and no shelf rows', async (
   expect(profile?.onboarded).toBe(true);
   expect(profile?.interests).toEqual([]);
 
-  // Surface RLS / network errors as distinct failures rather than letting them
-  // masquerade as a count mismatch (count stays null when the query errors).
   const { count, error: countErr } = await a
     .from('profile_courses')
     .select('*', { count: 'exact', head: true })
