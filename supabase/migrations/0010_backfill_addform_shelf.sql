@@ -1,4 +1,6 @@
--- 0009_backfill_addform_shelf.sql
+-- 0010_backfill_addform_shelf.sql
+-- (Originally numbered 0009; bumped to 0010 because PR #20 took 0008 and
+--  PR #21 took 0009 while this branch was being prepared.)
 -- One-time backfill: any user-created course (`is_preset = false`,
 -- `owner_id is not null`) that has no corresponding `profile_courses`
 -- row gets one inserted at position 0. Idempotent — safe to re-run.

@@ -65,7 +65,7 @@ Add one upsert into `profile_courses` after the lesson insert succeeds.
 
 ## Backfill (one-time)
 
-Migration `0009_backfill_addform_shelf.sql` — fully idempotent:
+Migration `0010_backfill_addform_shelf.sql` — fully idempotent:
 
 ```sql
 -- For every owner who has user-created courses but no shelf entry, add one.
