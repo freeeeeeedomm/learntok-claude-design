@@ -53,8 +53,10 @@ Look for: anything weird in the migration, any objection to the `courses.topic` 
 
 If happy: merge it via squash. (Project convention.)
 
-### 2. Apply migration 0008 to remote
+### 2. Apply migration 0009 to remote
 Run `npx supabase db push` (or whatever your usual deploy step is) to apply the new migration to your remote Supabase. After PR #21 is merged.
+
+**Note**: this migration was originally numbered 0008 but bumped to 0009 because PR #20 (admin category cascade, also 0008) merged while I was working — see "Race recovery" below.
 
 ### 3. Skim PR #22 (`/add` shelf fix)
 URL: https://github.com/freeeeeeedomm/learntok-claude-design/pull/22
@@ -108,7 +110,20 @@ These were small things I felt OK deciding without waking you. If any are wrong,
 4. **Stacked PR #22 on PR #21.** Both touch `AddForm.tsx`. Stacking is cleaner than independent branches that would conflict.
 5. **Group icons:** picked 💰 📜 🔬 ∑ 💻 — all easy emojis. The `cs` group icon collides with the future `Computer Programming` topic icon; flagged in PR2 spec for your call.
 6. **Group titles in Chinese (经济金融 / 人文历史 / 理工 / 数学 / 编程):** matches your conversation style. Easy to localize later if needed.
-7. **Migration order:** numbered 0008 (this PR's `topic_groups`) and 0009 (PR4's backfill). Sequential.
+7. **Migration order:** numbered 0009 (this PR's `topic_groups`) and 0010 (PR4's backfill). Sequential. (Originally 0008/0009; bumped by 1 each because PR #20 added 0008_categories_cascade.sql concurrently while I was working — see "Race recovery" below.)
+
+## Race recovery
+
+While I was working, PR #20 (admin category rename/delete) was merged to main. It added `supabase/migrations/0008_categories_cascade.sql`, which collided with my `0008_topic_groups.sql`.
+
+What I did:
+1. Rebased `claude/schema-cleanup` onto fresh main (clean, no conflicts)
+2. Renamed my migration `0008_topic_groups.sql` → `0009_topic_groups.sql`
+3. Renamed PR4's migration `0009_backfill_addform_shelf.sql` → `0010_backfill_addform_shelf.sql`
+4. Updated all internal references (seed.sql, AddForm.tsx, spec docs)
+5. Force-pushed both branches
+
+No lost work. PR #21 still has its original commit message referencing "0008" — that's now stale (the actual file is 0009) but harmless.
 
 ## R-ticket follow-ups I held back
 

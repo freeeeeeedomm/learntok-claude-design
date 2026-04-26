@@ -1,8 +1,11 @@
--- 0008_topic_groups.sql
+-- 0009_topic_groups.sql
 -- Foundation for the catalog expansion: 5 preset super-categories that
 -- contain topics. Built with the same owner_id/is_preset pattern as topics
 -- and courses so user-defined groups can be added later without further
 -- schema work.
+--
+-- Originally numbered 0008 but bumped to 0009 because PR #20 landed
+-- 0008_categories_cascade.sql concurrently. No functional change.
 
 create table public.topic_groups (
   id         uuid primary key default gen_random_uuid(),

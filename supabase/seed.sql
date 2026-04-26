@@ -17,7 +17,7 @@ on conflict (id) do update set
 
 -- ===== Topics (5 preset, mapped to groups) =====
 -- Transitional mapping: existing 5 topics each pin to the most-natural group
--- so things keep working after migration 0008. PR2 will replace these with
+-- so things keep working after migration 0009. PR2 will replace these with
 -- 24 Khan-imported topics under the same 5 groups.
 insert into public.topics (id, owner_id, is_preset, title, icon, color, position, group_id) values
   ('10000000-0000-0000-0000-000000000001', null, true, 'Physics',     '🧲', '#5e6ad2', 0, '00000000-0000-0000-0000-0000000000a3'),
@@ -33,7 +33,7 @@ on conflict (id) do update set
   group_id = excluded.group_id;
 
 -- ===== Courses (10 preset, 2 per topic) =====
--- Note: legacy `topic` text column dropped in 0008. Only `topic_id` is used.
+-- Note: legacy `topic` text column dropped in 0009. Only `topic_id` is used.
 insert into public.courses (id, owner_id, is_preset, title, topic_id, icon, position) values
   -- Physics
   ('20000000-0000-0000-0000-000000000011', null, true, 'Forces & Newton''s Laws', '10000000-0000-0000-0000-000000000001', '🧲', 0),

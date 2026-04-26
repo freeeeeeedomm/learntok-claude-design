@@ -73,7 +73,7 @@ export function AddForm() {
       }
 
       // Insert course owned by this user.
-      // (legacy `topic` text column dropped in migration 0008; topic_id is
+      // (legacy `topic` text column dropped in migration 0009; topic_id is
       // intentionally null here — user-pasted videos don't belong to a topic
       // until the user organizes them.)
       const { data: courseRow, error: courseErr } = await supabase

@@ -26,10 +26,10 @@ The next three PRs depend on `topic_groups` existing. Shipping schema first as i
 
 ## What changes
 
-### New migration: `supabase/migrations/0008_topic_groups.sql`
+### New migration: `supabase/migrations/0009_topic_groups.sql`
 
 ```sql
--- 0008_topic_groups.sql
+-- 0009_topic_groups.sql
 -- Foundation for the catalog expansion: 5 preset super-categories that
 -- contain topics. Built with the same owner_id/is_preset pattern as topics
 -- and courses so user-defined groups can be added later without further
@@ -199,7 +199,7 @@ It's the most-overlapping with the upcoming changes (the seed.sql block being to
 
 This PR's behavior is invisible to users; tests verify the schema is sound and existing flows still pass.
 
-- [ ] **Migration applies cleanly**: `npm run supabase:reset` succeeds (resets local DB, applies all migrations including 0008, runs new seed)
+- [ ] **Migration applies cleanly**: `npm run supabase:reset` succeeds (resets local DB, applies all migrations including 0009, runs new seed)
 - [ ] **Type regeneration succeeds**: `npm run gen:types` updates `lib/supabase/database.types.ts` without manual edits
 - [ ] **TypeScript build passes**: `npx tsc --noEmit` shows zero new errors (existing pre-PR errors, if any, are unchanged)
 - [ ] **Existing onboarding still works**: `npm test tests/onboarding.spec.ts` passes (PR #19's tests)
