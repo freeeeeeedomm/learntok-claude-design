@@ -268,13 +268,26 @@ async function main(): Promise<void> {
   const interceptor = attachItemListInterceptor(ctx, handle);
 
   // Helper: scroll a page repeatedly to trigger lazy-load API calls.
-  // Each scroll fires another item-list XHR which the interceptor catches.
-  const scrollUntilEnough = async (target: number, maxScrolls = 12) => {
+  // Each scroll fires another item-list XHR which the interceptor
+  // catches. Stops when we have `target` candidates AND scrolling has
+  // stabilized (the API stopped returning new items — feed end).
+  const scrollUntilEnough = async (target: number, maxScrolls = 30) => {
+    let lastCount = interceptor.harvest().length;
+    let stagnant = 0;
     for (let i = 0; i < maxScrolls; i++) {
-      const have = interceptor.harvest().length;
-      if (have >= target) return;
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.2));
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 1.5));
       await page.waitForTimeout(SCROLL_DELAY_MS);
+      const have = interceptor.harvest().length;
+      if (have === lastCount) {
+        stagnant++;
+      } else {
+        stagnant = 0;
+        lastCount = have;
+      }
+      // Done if we hit target AND last 2 scrolls produced nothing new
+      if (have >= target && stagnant >= 2) return;
+      // Or if we genuinely hit the end (4 consecutive empty scrolls)
+      if (stagnant >= 4) return;
     }
   };
 
@@ -295,7 +308,8 @@ async function main(): Promise<void> {
     await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
     await dismissModals(page);
-    await scrollUntilEnough(count);
+    // Aim for 2x count so oembed-failures don't drop us under target.
+    await scrollUntilEnough(Math.max(count * 2, 20));
     mergeFromInterceptor('initial');
 
     // If 0 — TikTok served an empty itemList because we're not
@@ -322,7 +336,7 @@ async function main(): Promise<void> {
       // an authenticated session. Then scroll to trigger more pages.
       await page.goto(profileUrl, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(2500);
-      await scrollUntilEnough(count);
+      await scrollUntilEnough(Math.max(count * 2, 20));
       mergeFromInterceptor('after-login');
     }
 
