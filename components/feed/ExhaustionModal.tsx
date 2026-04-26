@@ -89,12 +89,12 @@ export function ExhaustionModal({
           {canExtend && (
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-accent"
               onClick={doExtend}
               disabled={submitting}
               data-testid="feed-exhaustion-extend"
             >
-              {submitting ? 'extending…' : 'Watch 1 more minute (−60s)'}
+              {submitting ? 'extending…' : '1 more minute (−60s)'}
             </button>
           )}
         </div>
