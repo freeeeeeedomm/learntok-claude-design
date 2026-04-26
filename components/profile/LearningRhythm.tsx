@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type Session = {
   id: string;
@@ -45,8 +45,19 @@ function dayLabel(iso: string, todayKey: string, yesterdayKey: string): string {
 export function LearningRhythm({ sessions }: Props) {
   const [window, setWindow] = useState<Window>('week');
 
+  // `new Date()` returns the *server* clock during SSR and the *client*
+  // clock at hydration. They run in different timezones, so dayKey() drifts
+  // and "Today"/"Yesterday" labels disagree — that mismatch crashes the
+  // hydration of this entire subtree. We defer all time-dependent state
+  // until after mount so the SSR pass renders an empty shell and the
+  // first client render is the only one that touches the clock.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+  }, []);
+
   const view = useMemo(() => {
-    const now = new Date();
+    if (!now) return { rows: [], maxTotal: 0 };
     const dayCount = window === 'week' ? 7 : 30;
 
     // Build the list of date-keys to render, newest first.
@@ -86,12 +97,16 @@ export function LearningRhythm({ sessions }: Props) {
     });
 
     return { rows, maxTotal };
-  }, [sessions, window]);
+  }, [sessions, window, now]);
 
-  const todayKey = dayKey(new Date().toISOString());
-  const yesterdayDate = new Date();
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterdayKey = dayKey(yesterdayDate.toISOString());
+  const todayKey = now ? dayKey(now.toISOString()) : '';
+  const yesterdayKey = now
+    ? (() => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        return dayKey(d.toISOString());
+      })()
+    : '';
 
   return (
     <section className="profile-section" data-testid="profile-rhythm">
