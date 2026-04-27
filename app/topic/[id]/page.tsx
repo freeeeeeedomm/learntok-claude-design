@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { TopicCourseSection } from '@/components/topic/TopicCourseSection';
 
 function fmtBank(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -26,45 +27,28 @@ export default async function TopicPage({
     .single();
   if (!profile?.onboarded) redirect('/onboarding');
 
+  // Extended select picks up `owner_id` + `is_preset` so the client
+  // section can hide owner-only affordances (Add course, Organize, ⋯
+  // menu) on preset topics. Library-personalize design § "Behaviors":
+  // user-owned topic pages have CRUD; preset topic pages stay read-only
+  // until the user imports the topic via the Discover Add-to-home flow
+  // (PR-E).
   const { data: topic } = await supabase
     .from('topics')
-    .select('id, title, icon, color')
+    .select('id, title, icon, color, owner_id, is_preset')
     .eq('id', params.id)
     .single();
   if (!topic) notFound();
 
-  const [coursesRes, lessonsRes, progressRes] = await Promise.all([
-    supabase
-      .from('courses')
-      .select('id, title, icon, position')
-      .eq('topic_id', params.id)
-      .order('position', { ascending: true }),
-    supabase
-      .from('lessons')
-      .select('id, course_id, yt_id, position')
-      .order('position', { ascending: true }),
-    supabase
-      .from('lesson_progress')
-      .select('lesson_id, completed_at')
-      .eq('user_id', user.id),
-  ]);
+  const ownsTopic = topic.owner_id === user.id;
 
-  const courses = coursesRes.data ?? [];
-  const lessons = lessonsRes.data ?? [];
-  const progress = progressRes.data ?? [];
-  const doneIds = new Set(
-    progress.filter((p) => p.completed_at).map((p) => p.lesson_id)
-  );
+  const { data: coursesData } = await supabase
+    .from('courses')
+    .select('id, title, icon, position')
+    .eq('topic_id', params.id)
+    .order('position', { ascending: true });
 
-  const lessonsByCourse = new Map<
-    string,
-    Array<{ id: string; yt_id: string; done: boolean }>
-  >();
-  for (const l of lessons) {
-    const arr = lessonsByCourse.get(l.course_id) ?? [];
-    arr.push({ id: l.id, yt_id: l.yt_id, done: doneIds.has(l.id) });
-    lessonsByCourse.set(l.course_id, arr);
-  }
+  const courses = coursesData ?? [];
 
   return (
     <main className="app">
@@ -93,49 +77,21 @@ export default async function TopicPage({
           {courses.length} course{courses.length === 1 ? '' : 's'}
         </div>
 
-        <div className="col gap-8 mt-16">
-          {courses.map((c) => {
-            const ls = lessonsByCourse.get(c.id) ?? [];
-            const done = ls.filter((l) => l.done).length;
-            const firstYt = ls[0]?.yt_id;
-            return (
-              <a
-                key={c.id}
-                href={`/course/${c.id}`}
-                className="lesson-row"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-                data-testid={`topic-course-${c.id}`}
-              >
-                <div
-                  className="thumb"
-                  style={
-                    firstYt
-                      ? {
-                          backgroundImage: `url(https://i.ytimg.com/vi/${firstYt}/mqdefault.jpg)`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }
-                      : { background: topic.color ?? 'var(--accent)', color: '#fff' }
-                  }
-                >
-                  {firstYt ? '' : c.icon ?? '📚'}
-                </div>
-                <div className="grow col">
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{c.title}</div>
-                  <div className="body" style={{ fontSize: 11 }}>
-                    {done}/{ls.length} lessons
-                  </div>
-                </div>
-                <div style={{ color: 'var(--ink-mute)' }}>›</div>
-              </a>
-            );
-          })}
-          {courses.length === 0 && (
-            <div className="card" data-testid="topic-empty">
-              <div className="body">no courses yet under this topic.</div>
-            </div>
-          )}
-        </div>
+        <TopicCourseSection
+          topicId={topic.id}
+          ownsTopic={ownsTopic}
+          courses={courses.map((c) => ({
+            id: c.id,
+            title: c.title,
+            icon: c.icon,
+          }))}
+        />
+
+        {courses.length === 0 && !ownsTopic && (
+          <div className="card mt-16" data-testid="topic-empty">
+            <div className="body">no courses yet under this topic.</div>
+          </div>
+        )}
       </div>
     </main>
   );
