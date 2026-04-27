@@ -158,9 +158,11 @@ test('full flow: dev test login → onboarding → home rails → discover → a
   await page.getByTestId('nav-discover').click();
   await expect(page).toHaveURL(/\/discover$/);
 
-  // 10. Tap the "+ browse" header link → /discover.
+  // 10. Navigate to /discover (the legacy "+ browse" header link was replaced
+  // by the new Add topic / Organize toolbar in PR-B; bottom-nav still gets
+  // there).
   await page.goto('/home');
-  await page.getByTestId('home-browse-link').click();
+  await page.goto('/discover');
   await page.waitForURL('**/discover');
   // 5 group sections all render.
   for (const g of expectedGroups) {

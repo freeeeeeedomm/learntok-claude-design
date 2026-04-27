@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { TopicRail } from '@/components/home/TopicRail';
 import { StatsHero } from '@/components/home/StatsHero';
 import { ContinueRow } from '@/components/home/ContinueRow';
+import { HomeTopicSection } from '@/components/home/HomeTopicSection';
 
 // UTC-day-start for "today". A user in UTC+8 will see "today" reset at 8 AM
 // local — documented limitation in the spec; acceptable v1 trade-off.
@@ -27,27 +27,23 @@ export default async function HomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, streak, jar_balance_cached, onboarded, interests')
+    .select('display_name, streak, jar_balance_cached, onboarded')
     .eq('id', user.id)
     .single();
 
   if (!profile?.onboarded) redirect('/onboarding');
 
-  const interestIds: string[] = profile?.interests ?? [];
   const todayISO = startOfTodayUTC().toISOString();
 
-  // Stage 1: everything that doesn't depend on the user's shelf course IDs.
+  // Hard-cutover: Home reads ONLY owner-owned topics. Every existing user's
+  // preset shelf has been deep-copied into owner-owned topics by migration
+  // 0015's backfill, so there's no longer an `interests`-driven path.
   const [topicsRes, shelfRes, progressRes, todayRes] = await Promise.all([
-    interestIds.length > 0
-      ? supabase
-          .from('topics')
-          .select('id, title, icon, color, position, is_preset')
-          .in('id', interestIds)
-          .order('position', { ascending: true })
-      : Promise.resolve({ data: [] as Array<{
-          id: string; title: string; icon: string | null;
-          color: string | null; position: number; is_preset: boolean;
-        }>, error: null }),
+    supabase
+      .from('topics')
+      .select('id, title, icon, color, position, is_preset, owner_id')
+      .eq('owner_id', user.id)
+      .order('position', { ascending: true }),
     supabase
       .from('profile_courses')
       .select('course_id, position, courses!inner(id, topic_id, title, icon, position, is_preset)')
@@ -128,12 +124,12 @@ export default async function HomePage() {
     lessonsByCourse.set(l.course_id, arr);
   }
 
-  // Group courses by topic.
-  const coursesByTopic = new Map<string, typeof courses>();
+  // Group courses by topic. HomeTopicSection takes the lighter {id, title} shape.
+  const coursesByTopic = new Map<string, Array<{ id: string; title: string }>>();
   for (const c of courses) {
     if (!c.topic_id) continue;
     const arr = coursesByTopic.get(c.topic_id) ?? [];
-    arr.push(c);
+    arr.push({ id: c.id, title: c.title });
     coursesByTopic.set(c.topic_id, arr);
   }
 
@@ -195,66 +191,11 @@ export default async function HomePage() {
           </>
         )}
 
-        <div className="row between aic mt-24">
-          <div className="eyebrow">your topics</div>
-          <a
-            href="/discover"
-            data-testid="home-browse-link"
-            style={{
-              fontFamily: 'var(--mono)',
-              fontSize: 11,
-              color: 'var(--accent)',
-              textDecoration: 'none',
-            }}
-          >
-            + browse
-          </a>
-        </div>
-        <div className="col mt-8">
-          {topics.length === 0 ? (
-            <a
-              href="/discover"
-              className="lesson-row mt-12"
-              style={{
-                borderStyle: 'dashed',
-                justifyContent: 'center',
-                color: 'var(--accent)',
-                textDecoration: 'none',
-                gap: 8,
-              }}
-              data-testid="home-empty-cta"
-            >
-              <span style={{ fontSize: 16 }}>→</span>
-              <span>browse all topics</span>
-            </a>
-          ) : (
-            topics.map((t) => (
-              <TopicRail
-                key={t.id}
-                topic={{ id: t.id, title: t.title }}
-                courses={(coursesByTopic.get(t.id) ?? []).map((c) => ({
-                  id: c.id,
-                  title: c.title,
-                }))}
-                lessonsByCourse={lessonsByCourse}
-              />
-            ))
-          )}
-          <a
-            href="/add"
-            className="lesson-row mt-12"
-            style={{
-              borderStyle: 'dashed',
-              justifyContent: 'center',
-              color: 'var(--ink-soft)',
-              textDecoration: 'none',
-            }}
-            data-testid="home-add-course"
-          >
-            <span style={{ fontSize: 18 }}>+</span>
-            <span>paste YouTube link</span>
-          </a>
-        </div>
+        <HomeTopicSection
+          topics={topics.map((t) => ({ id: t.id, title: t.title }))}
+          coursesByTopic={coursesByTopic}
+          lessonsByCourse={lessonsByCourse}
+        />
       </div>
     </main>
   );
