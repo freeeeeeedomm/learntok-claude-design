@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { parseYouTubeUrl } from '@/lib/youtube/parse';
 
 const Q = z.object({ url: z.string().url() });
-
-// Extract YT video ID from various URL forms (watch?v=, youtu.be/,
-// /embed/, /shorts/, /v/).
-function extractYtId(url: string): string | null {
-  const m = url.match(
-    /(?:youtube\.com\/(?:.*[?&]v=|embed\/|shorts\/|v\/)|youtu\.be\/)([\w-]{11})/
-  );
-  return m ? m[1] : null;
-}
 
 type ParseResult = {
   ytId: string;
@@ -21,13 +13,18 @@ type ParseResult = {
   source: 'data-api' | 'oembed';
 };
 
+// This route keeps its own DataAPI / oembed handlers because it returns
+// richer fields (channel, thumbnail) than lib/youtube/api.ts — those
+// helpers are scoped to the bulk-import path which only needs title +
+// duration. Only the URL → ID extraction is shared with lib.
+
 async function parseViaDataApi(
   id: string,
-  key: string
+  key: string,
 ): Promise<ParseResult | { error: string; status: number }> {
   const res = await fetch(
     `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${id}&key=${key}`,
-    { signal: AbortSignal.timeout(8000) }
+    { signal: AbortSignal.timeout(8000) },
   );
   if (!res.ok) return { error: 'data_api_failed', status: 502 };
   const data = await res.json();
@@ -53,10 +50,10 @@ async function parseViaDataApi(
 }
 
 async function parseViaOembed(
-  id: string
+  id: string,
 ): Promise<ParseResult | { error: string; status: number }> {
   const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(
-    `https://www.youtube.com/watch?v=${id}`
+    `https://www.youtube.com/watch?v=${id}`,
   )}&format=json`;
   try {
     const res = await fetch(oembedUrl, { signal: AbortSignal.timeout(8000) });
@@ -87,8 +84,17 @@ export async function GET(req: Request) {
   if (!parsed.success)
     return NextResponse.json({ error: 'bad_url' }, { status: 400 });
 
-  const id = extractYtId(parsed.data.url);
-  if (!id) return NextResponse.json({ error: 'not_youtube' }, { status: 400 });
+  // Use the shared parser. This route only handles single-video URLs;
+  // playlist URLs are rejected because the response shape is
+  // single-video-only and adapting it would break existing callers.
+  const parsedUrl = parseYouTubeUrl(parsed.data.url);
+  if (parsedUrl.kind !== 'video') {
+    return NextResponse.json(
+      { error: parsedUrl.kind === 'playlist' ? 'not_a_single_video' : 'not_youtube' },
+      { status: 400 },
+    );
+  }
+  const id = parsedUrl.videoId;
 
   const key = process.env.YOUTUBE_API_KEY;
   // Use the Data API if we have a key (richer: duration), otherwise fall

@@ -1,7 +1,4 @@
-﻿Connecting to db 5432
-(node:1) ExperimentalWarning: Importing JSON modules is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -641,6 +638,3 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-
-A new version of Supabase CLI is available: v2.95.4 (currently installed v1.226.4)
-We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
