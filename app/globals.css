@@ -1073,3 +1073,11 @@ html, body {
 }
 .drag-handle:active { cursor: grabbing; }
 .grow { flex: 1; }
+
+/* Empty-course tile placeholder (no icon → first letter on gray bg). */
+.empty-course-tile {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-2); color: var(--ink-mute);
+  border-radius: 8px; font-family: var(--mono);
+  font-weight: 600;
+}
