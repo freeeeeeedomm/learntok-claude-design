@@ -11,39 +11,45 @@ export default async function DiscoverPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [profileRes, groupsRes, topicsRes, shelfRes, presetCoursesRes] = await Promise.all([
-    supabase.from('profiles').select('jar_balance_cached').eq('id', user.id).single(),
-    supabase
-      .from('topic_groups')
-      .select('id, key, title, icon, position')
-      .eq('is_preset', true)
-      .order('position', { ascending: true }),
-    supabase
-      .from('topics')
-      .select('id, group_id, title, icon, position')
-      .eq('is_preset', true)
-      .not('group_id', 'is', null)
-      .order('position', { ascending: true }),
-    supabase
-      .from('profile_courses')
-      .select('course_id, courses!inner(topic_id)')
-      .eq('user_id', user.id),
-    // Per-topic course count for the tile subtitle. Preset catalog only —
-    // user-added courses aren't shown on /discover.
-    supabase
-      .from('courses')
-      .select('id, topic_id')
-      .eq('is_preset', true)
-      .not('topic_id', 'is', null),
-  ]);
+  const [profileRes, groupsRes, topicsRes, importedRes, presetCoursesRes] =
+    await Promise.all([
+      supabase.from('profiles').select('jar_balance_cached').eq('id', user.id).single(),
+      supabase
+        .from('topic_groups')
+        .select('id, key, title, icon, position')
+        .eq('is_preset', true)
+        .order('position', { ascending: true }),
+      supabase
+        .from('topics')
+        .select('id, group_id, title, icon, position')
+        .eq('is_preset', true)
+        .not('group_id', 'is', null)
+        .order('position', { ascending: true }),
+      // Owner-owned topics that point back at a preset via source_topic_id.
+      // The unique partial index `topics_owner_source_uniq` guarantees at
+      // most one row per (owner, source) pair, so the map below is well-
+      // defined. Discover uses this to flip each card's CTA between
+      // "+ add to home" and "open".
+      supabase
+        .from('topics')
+        .select('id, source_topic_id')
+        .eq('owner_id', user.id)
+        .not('source_topic_id', 'is', null),
+      // Per-topic course count for the tile subtitle. Preset catalog only —
+      // user-added courses aren't shown on /discover.
+      supabase
+        .from('courses')
+        .select('id, topic_id')
+        .eq('is_preset', true)
+        .not('topic_id', 'is', null),
+    ]);
 
   const groups = groupsRes.data ?? [];
   const topics = topicsRes.data ?? [];
 
-  type ShelfRow = { course_id: string; courses: { topic_id: string | null } };
-  const shelfTopicIds = new Set<string>();
-  for (const row of (shelfRes.data ?? []) as unknown as ShelfRow[]) {
-    if (row.courses?.topic_id) shelfTopicIds.add(row.courses.topic_id);
+  const importedByPresetId = new Map<string, string>();
+  for (const row of importedRes.data ?? []) {
+    if (row.source_topic_id) importedByPresetId.set(row.source_topic_id, row.id);
   }
 
   const courseCounts = new Map<string, number>();
@@ -95,7 +101,7 @@ export default async function DiscoverPage() {
               </div>
               <TopicGrid
                 topics={list}
-                shelfTopicIds={shelfTopicIds}
+                importedByPresetId={importedByPresetId}
                 courseCounts={courseCounts}
               />
             </section>
