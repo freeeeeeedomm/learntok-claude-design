@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -63,6 +63,7 @@ export type Database = {
           is_preset: boolean
           owner_id: string | null
           position: number
+          source_course_id: string | null
           title: string
           topic_id: string | null
         }
@@ -73,6 +74,7 @@ export type Database = {
           is_preset?: boolean
           owner_id?: string | null
           position?: number
+          source_course_id?: string | null
           title: string
           topic_id?: string | null
         }
@@ -83,6 +85,7 @@ export type Database = {
           is_preset?: boolean
           owner_id?: string | null
           position?: number
+          source_course_id?: string | null
           title?: string
           topic_id?: string | null
         }
@@ -92,6 +95,13 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courses_source_course_id_fkey"
+            columns: ["source_course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
             referencedColumns: ["id"]
           },
           {
@@ -178,7 +188,9 @@ export type Database = {
           duration_seconds: number
           id: string
           position: number
+          source_lesson_id: string | null
           title: string
+          video_provider: string
           yt_id: string
         }
         Insert: {
@@ -187,7 +199,9 @@ export type Database = {
           duration_seconds: number
           id?: string
           position: number
+          source_lesson_id?: string | null
           title: string
+          video_provider?: string
           yt_id: string
         }
         Update: {
@@ -196,7 +210,9 @@ export type Database = {
           duration_seconds?: number
           id?: string
           position?: number
+          source_lesson_id?: string | null
           title?: string
+          video_provider?: string
           yt_id?: string
         }
         Relationships: [
@@ -205,6 +221,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lessons_source_lesson_id_fkey"
+            columns: ["source_lesson_id"]
+            isOneToOne: false
+            referencedRelation: "lessons"
             referencedColumns: ["id"]
           },
         ]
@@ -344,57 +367,6 @@ export type Database = {
           },
         ]
       }
-      topics: {
-        Row: {
-          color: string | null
-          created_at: string
-          group_id: string | null
-          icon: string | null
-          id: string
-          is_preset: boolean
-          owner_id: string | null
-          position: number
-          title: string
-        }
-        Insert: {
-          color?: string | null
-          created_at?: string
-          group_id?: string | null
-          icon?: string | null
-          id?: string
-          is_preset?: boolean
-          owner_id?: string | null
-          position?: number
-          title: string
-        }
-        Update: {
-          color?: string | null
-          created_at?: string
-          group_id?: string | null
-          icon?: string | null
-          id?: string
-          is_preset?: boolean
-          owner_id?: string | null
-          position?: number
-          title?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "topics_owner_id_fkey"
-            columns: ["owner_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "topics_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "topic_groups"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       topic_groups: {
         Row: {
           created_at: string
@@ -432,6 +404,67 @@ export type Database = {
             columns: ["owner_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topics: {
+        Row: {
+          color: string | null
+          created_at: string
+          group_id: string | null
+          icon: string | null
+          id: string
+          is_preset: boolean
+          owner_id: string | null
+          position: number
+          source_topic_id: string | null
+          title: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          group_id?: string | null
+          icon?: string | null
+          id?: string
+          is_preset?: boolean
+          owner_id?: string | null
+          position?: number
+          source_topic_id?: string | null
+          title: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          group_id?: string | null
+          icon?: string | null
+          id?: string
+          is_preset?: boolean
+          owner_id?: string | null
+          position?: number
+          source_topic_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topics_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "topic_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "topics_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "topics_source_topic_id_fkey"
+            columns: ["source_topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
             referencedColumns: ["id"]
           },
         ]
@@ -605,4 +638,3 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-
