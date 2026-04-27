@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { LucideIcon } from './LucideIcon';
 import { ImportButton } from './ImportButton';
+import { OpenTopicLink } from './OpenTopicLink';
 
 /**
  * One preset-topic card on /discover. The wrapper still links into the
@@ -9,8 +10,13 @@ import { ImportButton } from './ImportButton';
  *
  *  - Not yet imported → <ImportButton> ("+ add to home"), which deep-
  *    copies the topic onto the user's shelf and routes to /topic/<new>.
- *  - Already imported → an "Open" link to /topic/<ownerTopicId>, the
- *    user's owner-owned copy.
+ *  - Already imported → <OpenTopicLink> ("open") to /topic/<ownerTopicId>,
+ *    the user's owner-owned copy.
+ *
+ * Both CTAs are client components so they can stop the parent Link from
+ * navigating. Keeping TopicTile itself a Server Component avoids the
+ * Map → Client serialization issue with the props received from
+ * <TopicGrid>.
  *
  * `ownerTopicId` is non-null iff this preset has already been imported
  * by the current user. The Discover page computes that by querying
@@ -50,25 +56,7 @@ export function TopicTile({
         }}
       >
         {imported ? (
-          <a
-            href={`/topic/${ownerTopicId}`}
-            data-testid={`discover-topic-${id}-open`}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '6px 12px',
-              borderRadius: 999,
-              border: '1px solid var(--line)',
-              background: 'var(--bg-2)',
-              color: 'var(--ink)',
-              fontFamily: 'var(--mono)',
-              fontSize: 11,
-              textDecoration: 'none',
-            }}
-          >
-            open
-          </a>
+          <OpenTopicLink ownerTopicId={ownerTopicId} presetTopicId={id} />
         ) : (
           <ImportButton presetTopicId={id} />
         )}
