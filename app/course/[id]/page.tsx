@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { AddCourseButton } from '@/components/discover/AddCourseButton';
+import { CourseLectureSection } from '@/components/course/CourseLectureSection';
 
 function fmtBank(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -21,7 +22,7 @@ export default async function CoursePage({ params }: Params) {
   const [courseRes, profileRes, shelfRes] = await Promise.all([
     supabase
       .from('courses')
-      .select('id, title, topic_id, icon')
+      .select('id, title, topic_id, icon, owner_id')
       .eq('id', params.id)
       .maybeSingle(),
     supabase
@@ -41,6 +42,7 @@ export default async function CoursePage({ params }: Params) {
   if (!courseRes.data) redirect('/home');
   const course = courseRes.data;
   const inShelf = !!shelfRes.data;
+  const ownsCourse = course.owner_id === user.id;
 
   // If this course belongs to a topic, fetch the topic metadata for the
   // breadcrumb + back-link destination.
@@ -74,15 +76,6 @@ export default async function CoursePage({ params }: Params) {
   );
 
   const totalDone = lessons.filter((l) => doneIds.has(l.id)).length;
-
-  // "Current" lesson: first undone lesson whose predecessors are all done.
-  let firstUndoneIdx = -1;
-  for (let i = 0; i < lessons.length; i++) {
-    if (!doneIds.has(lessons[i].id)) {
-      firstUndoneIdx = i;
-      break;
-    }
-  }
 
   return (
     <main className="app">
@@ -139,56 +132,22 @@ export default async function CoursePage({ params }: Params) {
           />
         </div>
 
-        <div className="col gap-8 mt-24">
-          {lessons.map((l, i) => {
-            const isDone = doneIds.has(l.id);
-            const isCurrent = i === firstUndoneIdx;
-            const rowClass = [
-              'lesson-row',
-              isDone ? 'done' : '',
-              isCurrent ? 'current' : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-            return (
-              <a
-                key={l.id}
-                href={`/lesson/${l.id}`}
-                className={rowClass}
-                style={{ textDecoration: 'none', color: 'inherit' }}
-                data-testid={`course-lesson-${l.id}`}
-              >
-                <div
-                  className={`check-circle ${isDone ? 'done' : isCurrent ? 'current' : ''}`}
-                >
-                  {isDone ? '✓' : isCurrent ? '▶' : ''}
-                </div>
-                <div className="grow col">
-                  <div style={{ fontWeight: 500, fontSize: 14 }}>{l.title}</div>
-                  <div className="body" style={{ fontSize: 11 }}>
-                    {l.duration_seconds > 0
-                      ? `${Math.floor(l.duration_seconds / 60)} min`
-                      : '—'}
-                  </div>
-                </div>
-                <div
-                  className="thumb"
-                  style={{
-                    backgroundImage: `url(https://i.ytimg.com/vi/${l.yt_id}/default.jpg)`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                />
-              </a>
-            );
-          })}
+        <CourseLectureSection
+          courseId={course.id}
+          ownsCourse={ownsCourse}
+          lectures={lessons.map((l) => ({
+            id: l.id,
+            title: l.title,
+            yt_id: l.yt_id,
+            duration_seconds: l.duration_seconds,
+          }))}
+        />
 
-          {lessons.length === 0 && (
-            <div className="body" style={{ padding: 24, textAlign: 'center' }}>
-              no lessons in this course yet.
-            </div>
-          )}
-        </div>
+        {lessons.length === 0 && (
+          <div className="body" style={{ padding: 24, textAlign: 'center' }}>
+            no lessons in this course yet.
+          </div>
+        )}
       </div>
     </main>
   );

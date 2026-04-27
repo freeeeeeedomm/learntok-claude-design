@@ -34,7 +34,9 @@ test('home + topic smoke: login → home → click a topic → see courses', asy
   await firstCourseRow.click();
   await page.waitForURL(/\/course\/[0-9a-f-]{36}/, { timeout: 5000 });
   await expect(page.getByTestId('course-jar-chip')).toBeVisible();
-  const firstLessonRow = page.locator('[data-testid^="course-lesson-"]').first();
+  // PR-D renamed the per-row testid prefix from `course-lesson-` to
+  // `course-lecture-` when the inline list moved into CourseLectureSection.
+  const firstLessonRow = page.locator('[data-testid^="course-lecture-"]').first();
   await expect(firstLessonRow).toBeVisible();
 });
 
