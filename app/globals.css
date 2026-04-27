@@ -1070,6 +1070,7 @@ html, body {
 .drag-handle {
   cursor: grab; user-select: none; color: var(--ink-mute);
   padding: 4px;
+  touch-action: none;
 }
 .drag-handle:active { cursor: grabbing; }
 .grow { flex: 1; }

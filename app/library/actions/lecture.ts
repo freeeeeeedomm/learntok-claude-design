@@ -114,3 +114,61 @@ export async function addLectures(input: z.infer<typeof AddLecturesInput>) {
   revalidatePath(`/course/${courseId}`);
   return { ids: (inserted ?? []).map((r) => r.id) };
 }
+
+const RenameLectureInput = z.object({
+  lectureId: z.string().uuid(),
+  newTitle: z.string().min(1).max(120),
+});
+export async function renameLecture(input: z.infer<typeof RenameLectureInput>) {
+  const { lectureId, newTitle } = RenameLectureInput.parse(input);
+  await requireUserId();
+  const supabase = createClient();
+  // Look up course for revalidation.
+  const { data: row } = await supabase
+    .from('lessons')
+    .select('course_id')
+    .eq('id', lectureId)
+    .maybeSingle();
+  const { error } = await supabase
+    .from('lessons')
+    .update({ title: newTitle })
+    .eq('id', lectureId);
+  if (error) throw error;
+  if (row?.course_id) revalidatePath(`/course/${row.course_id}`);
+}
+
+const DeleteLectureInput = z.object({ lectureId: z.string().uuid() });
+export async function deleteLecture(input: z.infer<typeof DeleteLectureInput>) {
+  const { lectureId } = DeleteLectureInput.parse(input);
+  await requireUserId();
+  const supabase = createClient();
+  const { data: row } = await supabase
+    .from('lessons')
+    .select('course_id')
+    .eq('id', lectureId)
+    .maybeSingle();
+  const { error } = await supabase.from('lessons').delete().eq('id', lectureId);
+  if (error) throw error;
+  if (row?.course_id) revalidatePath(`/course/${row.course_id}`);
+}
+
+const ReorderLecturesInput = z.object({
+  courseId: z.string().uuid(),
+  orderedIds: z.array(z.string().uuid()).min(1),
+});
+export async function reorderLectures(input: z.infer<typeof ReorderLecturesInput>) {
+  const { courseId, orderedIds } = ReorderLecturesInput.parse(input);
+  const userId = await requireUserId();
+  await assertCourseOwner(courseId, userId);
+  const supabase = createClient();
+  const updates = orderedIds.map((id, i) =>
+    supabase
+      .from('lessons')
+      .update({ position: i })
+      .eq('id', id)
+      .eq('course_id', courseId)
+  );
+  const results = await Promise.all(updates);
+  for (const r of results) if (r.error) throw r.error;
+  revalidatePath(`/course/${courseId}`);
+}
