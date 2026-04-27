@@ -12,27 +12,55 @@
 
 ---
 
-## Pre-Flight Decision (before starting Task 1)
+## Cutover Strategy
 
-The migration is purely additive, but the new UI in PR-B reads owner-owned topics. Existing users' shelves today live in `profiles.interests` (preset topic IDs) + `profile_courses` (preset course refs). Two compatible paths:
+**Chosen path: hard cutover.** A single migration both adds the new columns and runs a backfill that converts every existing user's `interests`-based preset shelf into owner-owned deep copies (with `source_*_id` set and `lesson_progress` rows re-pointed to the new lesson IDs). After the backfill, `profiles.interests` is wiped and `profile_courses` rows that referenced preset courses are deleted.
 
-1. **Soft cutover (recommended for this MVP).** Home page in PR-B reads BOTH:
-   - owner-owned topics (`topics where owner_id = user`)
-   - legacy preset topics referenced via `interests` array
-   merging the two lists. New onboarding writes only owner-owned topics. Legacy users see their old shelf untouched until they explicitly re-onboard or fork preset topics from Discover.
-2. **Hard cutover.** Run a backfill at the start of PR-A: for every existing user, deep-copy each preset topic in their `interests` array into owner-owned rows with `source_topic_id` set, then migrate matching `lesson_progress` rows. Wipe `interests` after.
+This is safe because (a) only a handful of test users exist, (b) the migration is idempotent — re-running it is a no-op for users whose interests are already empty.
 
-**Action required before starting Task 1:** confirm path 1 vs path 2 with the user. The plan below assumes **path 1** (soft cutover). If path 2 is chosen, insert a new task between Task 1 and Task 2 to write a one-shot backfill SQL function and run it in the same migration.
+The backfill is implemented as part of `0015_library_personalize.sql` (Task 1, Step 2).
+
+## Parallel Development
+
+Dependency graph:
+
+```
+PR-A  ──┬──► PR-B  (Home + topic CRUD)
+        ├──► PR-C  (Topic detail + course CRUD)
+        ├──► PR-D  (Course detail + lecture rename/delete/reorder)
+        └──► PR-E  (Discover Add-to-home)
+```
+
+PR-A is a hard prerequisite. After it merges, **B / C / D / E can run in four parallel subagent sessions** — they touch different page files, different component directories, and (per the file split below) different action files.
+
+To eliminate file-level conflicts on `app/library/actions.ts`, the action code is split per entity:
+
+```
+app/library/actions/
+  _shared.ts       — requireUserId(), assertCourseOwner() helpers
+  lecture.ts       — addLectures (PR-A) + rename/delete/reorder (PR-D)
+  topic.ts         — PR-B
+  course.ts        — PR-C
+  import.ts        — PR-E (importPresetTopic)
+```
+
+PR-A creates `_shared.ts` and `lecture.ts`. The other PRs each create exactly one new file — zero file overlap with peers. The only sequencing constraint inside this group is PR-D extending `lecture.ts`, which can be cleanly rebased onto whatever else lands first.
+
+After PR-A is merged to `main`, dispatch four worktree-isolated subagents in parallel (one per PR) using the superpowers:subagent-driven-development pattern. Each gets a self-contained brief pointing at this plan's task numbers.
 
 ---
 
 ## File Structure
 
 **Created**
-- `supabase/migrations/0015_library_personalize.sql` — schema migration
+- `supabase/migrations/0015_library_personalize.sql` — schema migration + hard-cutover backfill
 - `lib/youtube/parse.ts` — extracted URL parser (video + playlist)
 - `lib/youtube/api.ts` — YouTube Data API wrappers (`fetchVideoMeta`, `expandPlaylist`)
-- `app/library/actions.ts` — 11 server actions
+- `app/library/actions/_shared.ts` — auth + ownership helpers
+- `app/library/actions/lecture.ts` — addLectures (PR-A) + rename/delete/reorder (PR-D)
+- `app/library/actions/topic.ts` — topic CRUD (PR-B)
+- `app/library/actions/course.ts` — course CRUD (PR-C)
+- `app/library/actions/import.ts` — importPresetTopic (PR-E)
 - `components/library/CreateTopicModal.tsx`
 - `components/library/RenameModal.tsx` — generic, reused for topic / course / lecture
 - `components/library/DeleteConfirmDialog.tsx` — generic, reused
@@ -62,18 +90,20 @@ The migration is purely additive, but the new UI in PR-B reads owner-owned topic
 
 This PR is a hard prerequisite for PR-B/C/D/E. After it lands, the others can run in parallel.
 
-### Task 1: Migration (additive schema)
+### Task 1: Migration (additive schema + hard-cutover backfill)
 
 **Files:**
 - Create: `supabase/migrations/0015_library_personalize.sql`
 
-- [ ] **Step 1: Write the migration**
+- [ ] **Step 1: Write the additive schema**
 
 ```sql
 -- 0015_library_personalize.sql
--- Source-of-fork tracing for deep-copies + future-proof video provider.
--- All additive; no existing rows touched.
+-- Source-of-fork tracing + future-proof video provider + one-shot
+-- backfill that converts every existing user's interest-based preset
+-- shelf into owner-owned deep copies.
 
+-- 1) Additive columns. No existing rows touched.
 alter table public.topics
   add column source_topic_id uuid references public.topics(id) on delete set null;
 
@@ -86,27 +116,157 @@ alter table public.lessons
 alter table public.lessons
   add column video_provider text not null default 'youtube';
 
--- Prevent the same user from forking the same preset topic twice.
--- The Discover CTA uses this to flip between "Add to home" and "Open".
+-- 2) Prevent the same user from forking the same preset topic twice.
 create unique index topics_owner_source_uniq
   on public.topics (owner_id, source_topic_id)
   where source_topic_id is not null;
 ```
 
-- [ ] **Step 2: Apply locally and regenerate types**
+- [ ] **Step 2: Append the hard-cutover backfill to the same migration file**
+
+```sql
+-- 3) Backfill: for every existing user with non-empty interests, deep-copy
+--    each preset topic into owner-owned rows and re-point lesson_progress
+--    to the new lesson IDs. Idempotent — users with empty interests are
+--    skipped, and the unique index above blocks re-imports if re-run.
+do $$
+declare
+  user_rec record;
+  preset_topic_id uuid;
+  new_topic_id uuid;
+  preset_course_rec record;
+  new_course_id uuid;
+  preset_lesson_rec record;
+  new_lesson_id uuid;
+  user_topic_pos int;
+begin
+  for user_rec in
+    select id, interests from public.profiles
+    where interests is not null and array_length(interests, 1) > 0
+  loop
+    user_topic_pos := 0;
+
+    for preset_topic_id in
+      select distinct unnest(user_rec.interests)
+    loop
+      -- Defensive: the interest must reference a real preset topic.
+      if not exists (
+        select 1 from public.topics
+        where id = preset_topic_id and is_preset = true
+      ) then
+        continue;
+      end if;
+
+      -- Idempotent skip: already imported.
+      if exists (
+        select 1 from public.topics
+        where owner_id = user_rec.id and source_topic_id = preset_topic_id
+      ) then
+        continue;
+      end if;
+
+      -- Copy the topic.
+      insert into public.topics (
+        owner_id, is_preset, title, icon, color, position, source_topic_id
+      )
+      select user_rec.id, false, title, icon, color, user_topic_pos, id
+      from public.topics where id = preset_topic_id
+      returning id into new_topic_id;
+
+      user_topic_pos := user_topic_pos + 1;
+
+      -- Copy each preset course under this topic.
+      for preset_course_rec in
+        select id, title, icon, position
+        from public.courses
+        where topic_id = preset_topic_id and is_preset = true
+        order by position
+      loop
+        insert into public.courses (
+          owner_id, topic_id, is_preset, title, icon, position, source_course_id
+        ) values (
+          user_rec.id, new_topic_id, false,
+          preset_course_rec.title, preset_course_rec.icon,
+          preset_course_rec.position, preset_course_rec.id
+        )
+        returning id into new_course_id;
+
+        -- Copy each lesson under this preset course, migrating progress.
+        for preset_lesson_rec in
+          select id, title, yt_id, duration_seconds, position
+          from public.lessons
+          where course_id = preset_course_rec.id
+          order by position
+        loop
+          insert into public.lessons (
+            course_id, position, title, yt_id, duration_seconds,
+            video_provider, source_lesson_id
+          ) values (
+            new_course_id, preset_lesson_rec.position,
+            preset_lesson_rec.title, preset_lesson_rec.yt_id,
+            preset_lesson_rec.duration_seconds, 'youtube', preset_lesson_rec.id
+          )
+          returning id into new_lesson_id;
+
+          -- Re-point this user's progress on the preset lesson to the new
+          -- owner-owned lesson. Composite PK (user_id, lesson_id) prevents
+          -- collisions because new_lesson_id is unique.
+          update public.lesson_progress
+          set lesson_id = new_lesson_id
+          where user_id = user_rec.id
+            and lesson_id = preset_lesson_rec.id;
+        end loop;
+      end loop;
+    end loop;
+
+    -- Wipe the user's interests so re-runs are no-ops and so the new
+    -- code doesn't double-render preset topics for legacy users.
+    update public.profiles set interests = '{}'::text[] where id = user_rec.id;
+  end loop;
+end $$;
+
+-- 4) Drop legacy profile_courses rows pointing at preset courses. The new
+--    owner-owned course rows are now the source of truth for these users'
+--    shelves; profile_courses entries pointing at preset courses are dead
+--    references.
+delete from public.profile_courses
+where course_id in (
+  select id from public.courses where is_preset = true
+);
+```
+
+- [ ] **Step 3: Apply locally and verify**
 
 ```bash
 pnpm supabase:reset
 pnpm gen:types
 ```
 
-Expected: migration applies cleanly, `lib/supabase/database.types.ts` now lists `source_topic_id` / `source_course_id` / `source_lesson_id` / `video_provider`.
+Expected:
+- migration applies cleanly
+- `lib/supabase/database.types.ts` lists `source_topic_id` / `source_course_id` / `source_lesson_id` / `video_provider`
+- if seed data includes a user with interests, they now have owner-owned topic rows whose `source_topic_id` matches their old `interests` entries
 
-- [ ] **Step 3: Commit**
+Manual verification (Supabase SQL editor or psql):
+
+```sql
+-- Should return zero rows: every user has had their interests cleared.
+select id, interests from profiles where array_length(interests, 1) > 0;
+
+-- Should return at least one row per (user × imported topic) pair:
+select owner_id, source_topic_id from topics where source_topic_id is not null;
+
+-- Should return zero rows: legacy preset references in profile_courses gone.
+select pc.* from profile_courses pc
+join courses c on c.id = pc.course_id
+where c.is_preset = true;
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add supabase/migrations/0015_library_personalize.sql lib/supabase/database.types.ts
-git commit -m "feat(db): library personalize migration — source_*_id + video_provider"
+git commit -m "feat(db): library personalize — schema + hard-cutover backfill"
 ```
 
 ### Task 2: Extract YouTube URL parser
@@ -365,33 +525,30 @@ git add lib/youtube/api.ts app/api/youtube/parse/route.ts
 git commit -m "refactor(youtube): extract Data API wrappers into lib/youtube"
 ```
 
-### Task 4: `addLectures` server action + library actions scaffold
+### Task 4: `addLectures` server action + actions scaffold
 
 **Files:**
-- Create: `app/library/actions.ts`
+- Create: `app/library/actions/_shared.ts`
+- Create: `app/library/actions/lecture.ts`
 
-- [ ] **Step 1: Scaffold the file with shared imports + ownership helper**
+- [ ] **Step 1: Create `_shared.ts` with auth + ownership helpers**
 
 ```ts
-// app/library/actions.ts
+// app/library/actions/_shared.ts
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
-import { parseYouTubeUrl } from '@/lib/youtube/parse';
-import { fetchVideoMeta, expandPlaylist } from '@/lib/youtube/api';
 
-const MAX_LECTURES_PER_SUBMISSION = 50;
+export const MAX_LECTURES_PER_SUBMISSION = 50;
 
-async function requireUserId(): Promise<string> {
+export async function requireUserId(): Promise<string> {
   const supabase = createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) throw new Error('not_authenticated');
   return data.user.id;
 }
 
-async function assertCourseOwner(courseId: string, userId: string) {
+export async function assertCourseOwner(courseId: string, userId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('courses')
@@ -403,7 +560,25 @@ async function assertCourseOwner(courseId: string, userId: string) {
 }
 ```
 
-- [ ] **Step 2: Write `addLectures`**
+- [ ] **Step 1b: Create `lecture.ts` shell**
+
+```ts
+// app/library/actions/lecture.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { parseYouTubeUrl } from '@/lib/youtube/parse';
+import { fetchVideoMeta, expandPlaylist } from '@/lib/youtube/api';
+import {
+  requireUserId,
+  assertCourseOwner,
+  MAX_LECTURES_PER_SUBMISSION,
+} from './_shared';
+```
+
+- [ ] **Step 2: Append `addLectures` to `lecture.ts`**
 
 ```ts
 const AddLecturesInput = z.object({
@@ -541,7 +716,7 @@ Expected: no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add app/library/actions.ts tests/library-add-lectures.spec.ts
+git add app/library/actions/ tests/library-add-lectures.spec.ts
 git commit -m "feat(library): addLectures server action with playlist expansion"
 ```
 
@@ -578,11 +753,19 @@ Depends on PR-A merged. Branch from origin/main: `claude/pr-b-topic-crud`.
 ### Task 6: Topic-level server actions
 
 **Files:**
-- Modify: `app/library/actions.ts` — append four functions
+- Create: `app/library/actions/topic.ts`
 
-- [ ] **Step 1: Add Zod schemas + actions**
+- [ ] **Step 1: Write the full file with all topic actions**
 
 ```ts
+// app/library/actions/topic.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { requireUserId } from './_shared';
+
 const CreateTopicInput = z.object({
   title: z.string().min(1).max(40),
   icon: z.string().max(40).optional(),
@@ -711,9 +894,11 @@ Expected: no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add app/library/actions.ts
+git add app/library/actions/topic.ts
 git commit -m "feat(library): topic CRUD server actions"
 ```
+
+> Imports in PR-B's UI components reference `@/app/library/actions/topic` directly.
 
 ### Task 7: Generic UI primitives — modal, dialog, menu
 
@@ -965,7 +1150,7 @@ git commit -m "feat(library): generic rename/delete/menu UI primitives"
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createTopic } from '@/app/library/actions';
+import { createTopic } from '@/app/library/actions/topic';
 
 type Props = { open: boolean; onClose: () => void };
 
@@ -1158,34 +1343,23 @@ git commit -m "feat(library): @dnd-kit-based SortableList wrapper"
 
 Already done above (lines 198–212 of `app/home/page.tsx`). The `+ browse` link at line 200–211 is the target.
 
-- [ ] **Step 2: Update home query to include owner-owned topics**
+- [ ] **Step 2: Replace home query with owner-owned topics only**
 
-Replace the current "topics by interests array" query with a union of owner-owned topics + (legacy) interest-based preset topics. Soft-cutover path:
+Hard cutover (see Task 1 backfill) means every existing user's preset shelf is already a deep-copied owner-owned tree. So Home reads ONLY owner-owned topics — no `interests` lookup at all.
+
+Replace the entire `interestIds`-driven topics query in `app/home/page.tsx` with:
 
 ```ts
-const ownedTopicsRes = await supabase
+const topicsRes = await supabase
   .from('topics')
   .select('id, title, icon, color, position, is_preset, owner_id')
   .eq('owner_id', user.id)
   .order('position', { ascending: true });
 
-const legacyTopicsRes =
-  interestIds.length > 0
-    ? await supabase
-        .from('topics')
-        .select('id, title, icon, color, position, is_preset, owner_id')
-        .in('id', interestIds)
-        .eq('is_preset', true)
-        .order('position', { ascending: true })
-    : { data: [], error: null };
-
-// Owner-owned first, then legacy preset (if any), de-duplicated by id.
-const seen = new Set<string>();
-const topics = [
-  ...(ownedTopicsRes.data ?? []),
-  ...(legacyTopicsRes.data ?? []),
-].filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+const topics = topicsRes.data ?? [];
 ```
+
+Also drop the `interests` field from the `profiles` select earlier in the file — it's no longer read.
 
 - [ ] **Step 3: Replace `+ browse` with new toolbar**
 
@@ -1265,7 +1439,7 @@ import {
   deleteTopic,
   reorderTopics,
   getTopicDeleteBlastRadius,
-} from '@/app/library/actions';
+} from '@/app/library/actions/topic';
 
 type Topic = { id: string; title: string };
 type Course = { id: string; title: string };
@@ -1499,11 +1673,19 @@ Branch from origin/main: `claude/pr-c-course-crud`. Depends on PR-A merged. Inde
 ### Task 11: Course-level server actions
 
 **Files:**
-- Modify: `app/library/actions.ts` — append four functions
+- Create: `app/library/actions/course.ts`
 
-- [ ] **Step 1: Add Zod schemas + actions**
+- [ ] **Step 1: Write the full file with all course actions**
 
 ```ts
+// app/library/actions/course.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { requireUserId } from './_shared';
+
 const CreateCourseInput = z.object({
   topicId: z.string().uuid(),
   title: z.string().min(1).max(60),
@@ -1627,9 +1809,11 @@ npx tsc --noEmit
 - [ ] **Step 3: Commit**
 
 ```bash
-git add app/library/actions.ts
+git add app/library/actions/course.ts
 git commit -m "feat(library): course CRUD server actions"
 ```
+
+> Imports in PR-C's UI components reference `@/app/library/actions/course`.
 
 ### Task 12: `CreateCourseModal` + `EmptyCourseTile`
 
@@ -1644,7 +1828,7 @@ git commit -m "feat(library): course CRUD server actions"
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { createCourse } from '@/app/library/actions';
+import { createCourse } from '@/app/library/actions/course';
 
 type Props = { topicId: string; open: boolean; onClose: () => void };
 
@@ -1776,7 +1960,7 @@ import {
   deleteCourse,
   reorderCourses,
   getCourseDeleteBlastRadius,
-} from '@/app/library/actions';
+} from '@/app/library/actions/course';
 
 type Course = { id: string; title: string; icon: string | null };
 type Props = { topicId: string; ownsTopic: boolean; courses: Course[] };
@@ -1982,9 +2166,9 @@ Branch: `claude/pr-d-lecture-crud`. Depends on PR-A merged.
 ### Task 14: Lecture-level server actions
 
 **Files:**
-- Modify: `app/library/actions.ts` — append three functions (`addLectures` already added in PR-A)
+- Modify: `app/library/actions/lecture.ts` — append three functions (`addLectures` lives here from PR-A)
 
-- [ ] **Step 1: Add rename / delete / reorder**
+- [ ] **Step 1: Append rename / delete / reorder to `lecture.ts`**
 
 ```ts
 const RenameLectureInput = z.object({
@@ -2050,9 +2234,11 @@ export async function reorderLectures(input: z.infer<typeof ReorderLecturesInput
 
 ```bash
 npx tsc --noEmit
-git add app/library/actions.ts
+git add app/library/actions/lecture.ts
 git commit -m "feat(library): lecture rename/delete/reorder server actions"
 ```
+
+> Imports in PR-D's UI components reference `@/app/library/actions/lecture`.
 
 ### Task 15: `AddLectureModal` (textarea, multi-URL)
 
@@ -2066,7 +2252,7 @@ git commit -m "feat(library): lecture rename/delete/reorder server actions"
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { addLectures } from '@/app/library/actions';
+import { addLectures } from '@/app/library/actions/lecture';
 
 type Props = { courseId: string; open: boolean; onClose: () => void };
 
@@ -2183,7 +2369,7 @@ import {
   renameLecture,
   deleteLecture,
   reorderLectures,
-} from '@/app/library/actions';
+} from '@/app/library/actions/lecture';
 
 type Lecture = { id: string; title: string; yt_id: string; duration_seconds: number };
 type Props = { courseId: string; ownsCourse: boolean; lectures: Lecture[] };
@@ -2404,11 +2590,19 @@ Branch: `claude/pr-e-discover-import`. Depends on PR-A merged. Independent of B/
 ### Task 17: `importPresetTopic` server action
 
 **Files:**
-- Modify: `app/library/actions.ts` — append
+- Create: `app/library/actions/import.ts`
 
 - [ ] **Step 1: Write the deep-copy action**
 
 ```ts
+// app/library/actions/import.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { requireUserId } from './_shared';
+
 const ImportPresetTopicInput = z.object({ presetTopicId: z.string().uuid() });
 
 export async function importPresetTopic(
@@ -2544,9 +2738,11 @@ export async function importPresetTopic(
 
 ```bash
 npx tsc --noEmit
-git add app/library/actions.ts
+git add app/library/actions/import.ts
 git commit -m "feat(library): importPresetTopic — three-level deep copy with source refs"
 ```
+
+> Imports in PR-E's UI components reference `@/app/library/actions/import`.
 
 ### Task 18: Discover CTA — `Add to home` / `Open`
 
@@ -2596,7 +2792,7 @@ Create `components/discover/ImportButton.tsx`:
 'use client';
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { importPresetTopic } from '@/app/library/actions';
+import { importPresetTopic } from '@/app/library/actions/import';
 
 export function ImportButton({ presetTopicId }: { presetTopicId: string }) {
   const [pending, startTransition] = useTransition();
