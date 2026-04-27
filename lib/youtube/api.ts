@@ -22,11 +22,47 @@ function isoToSeconds(iso: string): number {
 }
 
 /**
- * Batch-fetch metadata for up to 50 video IDs in a single Data API call.
- * Throws if YOUTUBE_API_KEY is missing or the API errors. The returned
- * array may be shorter than the input if YouTube hides any of the IDs
- * (private / deleted / region-blocked); the caller should detect that
- * by indexing on `videoId`.
+ * Per-video oembed fallback used when YOUTUBE_API_KEY isn't configured.
+ * oembed needs no auth but returns no duration — caller stores 0 and the
+ * UI shows "—" until a real heartbeat overrides it. Mirrors the legacy
+ * /api/youtube/parse fallback so single-video adds keep working without
+ * admin config.
+ */
+async function fetchVideoMetaOneViaOembed(
+  videoId: string,
+): Promise<VideoMeta | null> {
+  const oembedUrl =
+    `https://www.youtube.com/oembed?url=` +
+    encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`) +
+    `&format=json`;
+  try {
+    const res = await fetch(oembedUrl, {
+      signal: AbortSignal.timeout(ABORT_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { title?: string };
+    return {
+      videoId,
+      title: data.title ?? videoId,
+      durationSeconds: 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Batch-fetch metadata for up to 50 video IDs.
+ *
+ * Prefers the Data API (snippet + contentDetails in one call → real
+ * duration). When YOUTUBE_API_KEY isn't set, falls back to per-video
+ * oembed in parallel — title-only, duration treated as 0. Playlist
+ * expansion still requires the key (oembed has no playlist-items
+ * endpoint), so paste-a-playlist won't work without it.
+ *
+ * The returned array may be shorter than the input if YouTube hides any
+ * of the IDs (private / deleted / region-blocked); the caller should
+ * detect that by indexing on `videoId`.
  */
 export async function fetchVideoMeta(videoIds: string[]): Promise<VideoMeta[]> {
   if (videoIds.length === 0) return [];
@@ -34,7 +70,11 @@ export async function fetchVideoMeta(videoIds: string[]): Promise<VideoMeta[]> {
     throw new Error(`fetchVideoMeta supports <=50 IDs; got ${videoIds.length}`);
   }
   const key = process.env.YOUTUBE_API_KEY;
-  if (!key) throw new Error('YOUTUBE_API_KEY is not configured');
+  if (!key) {
+    // Graceful degradation: oembed every ID in parallel, drop unresolved.
+    const results = await Promise.all(videoIds.map(fetchVideoMetaOneViaOembed));
+    return results.filter((m): m is VideoMeta => m !== null);
+  }
 
   const url =
     `https://www.googleapis.com/youtube/v3/videos` +
