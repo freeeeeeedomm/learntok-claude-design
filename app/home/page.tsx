@@ -35,19 +35,16 @@ export default async function HomePage() {
 
   const todayISO = startOfTodayUTC().toISOString();
 
-  // Hard-cutover: Home reads ONLY owner-owned topics. Every existing user's
-  // preset shelf has been deep-copied into owner-owned topics by migration
-  // 0015's backfill, so there's no longer an `interests`-driven path.
-  const [topicsRes, shelfRes, progressRes, todayRes] = await Promise.all([
+  // Hard-cutover: Home reads ONLY owner-owned topics + their owner-owned
+  // courses. Every existing user's preset shelf has been deep-copied into
+  // owner-owned rows by the library-personalize backfill, and that backfill
+  // also drops legacy `profile_courses` rows pointing at preset courses —
+  // there's no longer a profile_courses-driven shelf path here.
+  const [topicsRes, progressRes, todayRes] = await Promise.all([
     supabase
       .from('topics')
       .select('id, title, icon, color, position, is_preset, owner_id')
       .eq('owner_id', user.id)
-      .order('position', { ascending: true }),
-    supabase
-      .from('profile_courses')
-      .select('course_id, position, courses!inner(id, topic_id, title, icon, position, is_preset)')
-      .eq('user_id', user.id)
       .order('position', { ascending: true }),
     supabase
       .from('lesson_progress')
@@ -61,28 +58,24 @@ export default async function HomePage() {
   ]);
 
   const topics = topicsRes.data ?? [];
+  const topicIds = topics.map((t) => t.id);
 
-  // Flatten the shelf join into the shape the rest of this function expects.
-  type ShelfRow = {
-    course_id: string;
-    position: number;
-    courses: {
-      id: string;
-      topic_id: string | null;
-      title: string;
-      icon: string | null;
-      position: number;
-      is_preset: boolean;
-    };
-  };
-  const courses = ((shelfRes.data ?? []) as unknown as ShelfRow[]).map((row) => ({
-    id: row.courses.id,
-    topic_id: row.courses.topic_id,
-    title: row.courses.title,
-    icon: row.courses.icon,
-    position: row.position, // shelf-position, not course.position
-    is_preset: row.courses.is_preset,
-  }));
+  // Stage 2: courses under those topics. Owner_id check is redundant
+  // (parent topic is already owner-scoped) but keeps RLS-style intent
+  // explicit and protects against future schema drift.
+  const coursesRes = topicIds.length > 0
+    ? await supabase
+        .from('courses')
+        .select('id, topic_id, title, icon, position, is_preset')
+        .in('topic_id', topicIds)
+        .eq('owner_id', user.id)
+        .order('position', { ascending: true })
+    : { data: [] as Array<{
+        id: string; topic_id: string | null; title: string;
+        icon: string | null; position: number; is_preset: boolean;
+      }>, error: null };
+
+  const courses = coursesRes.data ?? [];
 
   const shelfCourseIds = courses.map((c) => c.id);
 
