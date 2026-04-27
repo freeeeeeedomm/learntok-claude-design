@@ -3,8 +3,13 @@
 // All callers run with the user-token Supabase client; RLS enforces
 // per-row policies, but these helpers add early-fail checks so we get
 // clean error messages instead of opaque RLS denials.
-
-'use server';
+//
+// NOTE: this file intentionally does NOT have a 'use server' directive.
+// Next.js requires every export from a 'use server' module to be an
+// async function — adding it here would break the
+// MAX_LECTURES_PER_SUBMISSION constant export. The helpers below are
+// imported only from per-entity action files (which themselves carry
+// 'use server'), so they remain server-only at the call site.
 
 import { createClient } from '@/lib/supabase/server';
 

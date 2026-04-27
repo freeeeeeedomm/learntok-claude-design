@@ -1016,3 +1016,60 @@ html, body {
 .btn-accent:hover { background: #2a2b30; }
 .btn-accent:active { transform: scale(0.98); }
 .btn-accent:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* Library CRUD primitives — modal/dialog/menu shared by topic/course/lecture */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--ink-mute);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 280px; max-width: 90vw;
+}
+.btn-icon {
+  background: transparent; border: none; padding: 4px 8px;
+  font-size: 18px; cursor: pointer; color: var(--ink-mute);
+  border-radius: 6px;
+}
+.btn-icon:hover { background: var(--bg-2); color: var(--accent); }
+.btn-icon-active { background: var(--bg-2); color: var(--accent); border: 1px solid var(--accent); }
+.menu-popover {
+  position: absolute; top: 100%; right: 0;
+  background: var(--bg); border: 1px solid var(--ink-mute);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 140px; z-index: 50;
+}
+.menu-item {
+  display: block; width: 100%; padding: 8px 12px;
+  background: transparent; border: none; text-align: left;
+  font-size: 13px; color: var(--accent); cursor: pointer;
+}
+.menu-item:hover { background: var(--bg-2); }
+.menu-item-danger { color: var(--nibs); }
+.btn-danger { background: var(--nibs); color: white; }
+
+/* Home topic toolbar — Add topic / Organize / Done */
+.link-btn {
+  background: transparent; border: none;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--accent); cursor: pointer; padding: 4px 8px;
+}
+.link-btn:hover { text-decoration: underline; }
+
+/* Sortable rows used in Organize mode */
+.sortable-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px; border: 1px solid var(--ink-mute);
+  border-radius: 8px; margin-top: 8px; background: var(--bg);
+}
+.drag-handle {
+  cursor: grab; user-select: none; color: var(--ink-mute);
+  padding: 4px;
+}
+.drag-handle:active { cursor: grabbing; }
+.grow { flex: 1; }
