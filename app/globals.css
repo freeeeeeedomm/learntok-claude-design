@@ -708,20 +708,19 @@ html, body {
 .rhythm-block {
   height: 100%;
 }
+/* Learn vs scroll-time use a hue contrast (deep ink-blue vs warm coral)
+   instead of fill vs stripe. At 10px the bar is too thin for patterns to
+   read cleanly, and solid colors give a much sharper at-a-glance signal.
+   These two values are local one-offs (not in the root palette) — if they
+   spread to other components, promote them to CSS vars then. */
 .rhythm-block--learn {
-  background: var(--accent);
+  background: #2a4a6b;
 }
 .rhythm-block--feed {
   /* IMPORTANT: do NOT use class name "feed" here — there's a global
      .feed { position: fixed; inset: 0 } rule from the /feed page that
      would catch this element and stretch it across the viewport. */
-  background: repeating-linear-gradient(
-    45deg,
-    var(--ink-mute),
-    var(--ink-mute) 3px,
-    var(--bg-2) 3px,
-    var(--bg-2) 6px
-  );
+  background: var(--nibs);
 }
 .rhythm-empty {
   flex: 0 1 200px;        /* sits in the bar's slot so totals stays right-aligned */
